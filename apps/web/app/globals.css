@@ -112,8 +112,11 @@ input:focus { border-color: var(--ink); }
 .steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
 .steps li { counter-increment: s; }
 .steps li::before { content: counter(s); display: block; font-weight: 800; font-stretch: 75%; font-size: 2.4rem; line-height: 1; margin-bottom: 0.5rem; }
-.plans { display: grid; grid-template-columns: repeat(2, minmax(0, 340px)); gap: 1.5rem; margin-top: 1.5rem; }
-.plan { border: 2px solid var(--ink); border-radius: var(--radius); padding: 1.5rem; background: var(--surface); }
+.free-line { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: baseline; padding: 1rem 1.25rem; margin-top: 1.25rem; background: var(--plate); border: 2px solid var(--ink); border-radius: var(--radius); }
+.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-top: 1.25rem; }
+.plan { border: 1px solid var(--concrete); border-radius: var(--radius); padding: 1.5rem; background: var(--surface); }
+.plan-main { border: 2px solid var(--ink); }
+.plan-sub { margin: 0.25rem 0 0; }
 .plan .price { font-size: 2rem; font-weight: 800; font-stretch: 85%; }
 .plan ul { padding-left: 1.1rem; margin: 0.75rem 0 0; }
 .limits { columns: 2 280px; column-gap: 2.5rem; padding-left: 1.1rem; }

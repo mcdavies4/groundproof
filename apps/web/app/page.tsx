@@ -14,7 +14,7 @@ export default function Home() {
             before you send the next payment.
           </p>
           <WaitlistForm />
-          <p className="small muted">Pilots open to UK-based owners first. No card needed.</p>
+          <p className="small muted">Your first check-in is free. No card needed.</p>
         </div>
 
         <aside className="proof" aria-label="Example check-in log">
@@ -63,20 +63,38 @@ export default function Home() {
       <section className="section">
         <div className="wrap">
           <h2>Pricing</h2>
-          <p className="muted">Per property, billed in pounds. Your people in Nigeria never pay.</p>
+          <p className="muted">Per property. Your people on the ground never pay.</p>
+
+          <div className="free-line">
+            <strong>Your first check-in is free.</strong>
+            <span>Add your property, do the anchor visit, and see a real verdict before you pay anything.</span>
+          </div>
+
           <div className="plans">
             <div className="plan">
+              <h3>Check pack</h3>
+              <div className="price">₦6,000</div>
+              <p className="small muted plan-sub">3 check-ins, ₦2,000 each. No subscription.</p>
+              <ul>
+                <li>Use them whenever you want an update</li>
+                <li>Photo log with verdicts</li>
+                <li>Top up any time</li>
+              </ul>
+            </div>
+            <div className="plan">
               <h3>Watch</h3>
-              <div className="price">£9<span className="small muted"> a month</span></div>
+              <div className="price">₦5,000<span className="small muted"> a month</span></div>
+              <p className="small muted plan-sub">About ₦1,250 per check-in.</p>
               <ul>
                 <li>Weekly check-ins</li>
                 <li>One person on the ground</li>
                 <li>Photo log with verdicts</li>
               </ul>
             </div>
-            <div className="plan">
+            <div className="plan plan-main">
               <h3>Build</h3>
-              <div className="price">£29<span className="small muted"> a month</span></div>
+              <div className="price">₦15,000<span className="small muted"> a month</span></div>
+              <p className="small muted plan-sub">Or ₦150,000 for 12 months, two months free.</p>
               <ul>
                 <li>Stages tied to your payments</li>
                 <li>Unlimited check-ins, up to three people</li>
@@ -84,6 +102,9 @@ export default function Home() {
               </ul>
             </div>
           </div>
+          <p className="small muted" style={{ marginTop: "1.25rem" }}>
+            Paying from abroad? UK and other international cards work. Prices are in naira and your bank converts at checkout.
+          </p>
         </div>
       </section>
 
