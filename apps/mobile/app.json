@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Groundproof",
+    "slug": "groundproof-reporter",
+    "scheme": "groundproof",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "ng.the36th.groundproof",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "ng.the36th.groundproof",
+      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-camera", { "cameraPermission": "Groundproof uses the camera to take check-in photos at the property." }],
+      ["expo-location", { "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property." }]
+    ]
+  }
+}
