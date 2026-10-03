@@ -3,21 +3,56 @@
     "name": "Groundproof",
     "slug": "groundproof-reporter",
     "scheme": "groundproof",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "ng.the36th.groundproof",
       "supportsTablet": false
     },
     "android": {
       "package": "ng.the36th.groundproof",
-      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#10251f"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "plugins": [
       "expo-router",
-      ["expo-camera", { "cameraPermission": "Groundproof uses the camera to take check-in photos at the property." }],
-      ["expo-location", { "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property." }]
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#10251f"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Groundproof uses the camera to take check-in photos at the property.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property."
+        }
+      ]
     ]
   }
 }

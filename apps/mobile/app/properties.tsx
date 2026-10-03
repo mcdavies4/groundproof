@@ -1,11 +1,36 @@
 import { useCallback, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Linking, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { c, s } from "@/lib/theme";
 import { Button, Plate } from "@/lib/ui";
 
 type Row = { id: string; label: string; postcode: string; anchored_at: string | null };
+
+const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? "https://groundproof-sigma.vercel.app";
+
+function confirmDelete() {
+  Alert.alert(
+    "Delete your account?",
+    "This permanently deletes your account. Check-ins you made stay in the owners' history, no longer linked to you. This can't be undone.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const { error } = await supabase.functions.invoke("delete-account", { body: {} });
+          if (error) {
+            Alert.alert("Couldn't delete your account", "Try again, or email us from the website.");
+            return;
+          }
+          await supabase.auth.signOut();
+          router.replace("/");
+        },
+      },
+    ],
+  );
+}
 
 export default function Properties() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -70,8 +95,16 @@ export default function Properties() {
           </Pressable>
         )}
         ListFooterComponent={
-          <View style={{ marginTop: 24 }}>
+          <View style={{ marginTop: 24, gap: 12 }}>
             <Button title="Sign out" secondary onPress={async () => { await supabase.auth.signOut(); router.replace("/"); }} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+              <Pressable onPress={() => Linking.openURL(`${SITE}/privacy`)} accessibilityRole="link" hitSlop={10}>
+                <Text style={[s.muted, { textDecorationLine: "underline" }]}>Privacy policy</Text>
+              </Pressable>
+              <Pressable onPress={confirmDelete} accessibilityRole="button" hitSlop={10}>
+                <Text style={{ color: c.flagged, fontSize: 15, textDecorationLine: "underline" }}>Delete my account</Text>
+              </Pressable>
+            </View>
           </View>
         }
       />

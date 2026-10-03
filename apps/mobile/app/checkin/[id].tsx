@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
-import * as FileSystem from "expo-file-system";
+import { File } from "expo-file-system";
 import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
-import { decode } from "base64-arraybuffer";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { c, s } from "@/lib/theme";
@@ -98,7 +97,10 @@ export default function CheckIn() {
       ]);
       if (!photo) throw new Error("No photo captured");
       // Resize before upload: clearer for the photo check, and far less mobile data.
-      const small = await manipulateAsync(photo.uri, [{ resize: { width: 1600 } }], { compress: 0.7, format: SaveFormat.JPEG });
+      const ctx = ImageManipulator.manipulate(photo.uri);
+      ctx.resize({ width: 1600 });
+      const rendered = await ctx.renderAsync();
+      const small = await rendered.saveAsync({ compress: 0.7, format: SaveFormat.JPEG });
       setShots((prev) => [
         ...prev,
         {
@@ -131,9 +133,9 @@ export default function CheckIn() {
 
       const paths: string[] = [];
       for (let i = 0; i < shots.length; i++) {
-        const b64 = await FileSystem.readAsStringAsync(shots[i].uri, { encoding: FileSystem.EncodingType.Base64 });
+        const bytes = await new File(shots[i].uri).arrayBuffer();
         const path = `${property.id}/${checkinId}/${i + 1}.jpg`;
-        const { error: upErr } = await supabase.storage.from("checkins").upload(path, decode(b64), { contentType: "image/jpeg" });
+        const { error: upErr } = await supabase.storage.from("checkins").upload(path, bytes, { contentType: "image/jpeg" });
         if (upErr) throw new Error(`Photo upload failed: ${upErr.message}`);
         paths.push(path);
       }

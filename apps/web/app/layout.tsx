@@ -25,10 +25,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="brand">Groundproof</Link>
             <nav>
               <Link href="/dashboard">Your properties</Link>
+              <Link href="/account">Account</Link>
             </nav>
           </div>
         </header>
         {children}
+        <footer className="site-foot">
+          <div className="wrap legal-links">
+            <span>Groundproof is built by The 36th Solutions Ltd. Not affiliated with NIPOST.</span>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/delete-account">Delete your account</Link>
+          </div>
+        </footer>
       </body>
     </html>
   );

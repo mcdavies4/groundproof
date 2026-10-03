@@ -120,9 +120,6 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="site-foot">
-        <div className="wrap">Groundproof is built by The 36th Solutions Ltd. Not affiliated with NIPOST.</div>
-      </footer>
     </main>
   );
 }

@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const isApp = path.startsWith("/dashboard") || path.startsWith("/properties");
+  const isApp = path.startsWith("/dashboard") || path.startsWith("/properties") || path === "/account";
 
   if (isApp && !data.user) {
     const url = request.nextUrl.clone();
