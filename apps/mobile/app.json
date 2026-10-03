@@ -12,12 +12,39 @@
     },
     "android": {
       "package": "ng.the36th.groundproof",
-      "permissions": ["CAMERA", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-router",
-      ["expo-camera", { "cameraPermission": "Groundproof uses the camera to take check-in photos at the property." }],
-      ["expo-location", { "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property." }]
-    ]
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Groundproof uses the camera to take check-in photos at the property."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property."
+        }
+      ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "afbf3324-0015-4b69-99c8-6bf2f8831a28"
+      }
+    },
+    "owner": "the-36th-company"
   }
 }
