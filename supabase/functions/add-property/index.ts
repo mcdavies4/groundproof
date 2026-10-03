@@ -41,7 +41,12 @@ Deno.serve(async (req) => {
       level = lv;
       break;
     } catch (e) {
-      if (e instanceof NipostError && [402, 403].includes(e.status)) continue; // no credits / level not granted
+      // Key not granted this level yet, or out of credits: fall back to the next level down.
+      if (
+        e instanceof NipostError &&
+        ([402, 403].includes(e.status) ||
+          ["level_not_granted", "insufficient_scope", "insufficient_credits"].includes(e.code))
+      ) continue;
       throw e;
     }
   }

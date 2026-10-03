@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import type { Product } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 
 export async function addMilestone(propertyId: string, form: FormData) {
@@ -28,4 +30,15 @@ export async function createInvite(propertyId: string) {
   const supabase = createClient();
   await supabase.from("invites").insert({ property_id: propertyId });
   revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function startCheckout(propertyId: string, product: Product) {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("create-payment", {
+    body: { property_id: propertyId, product },
+  });
+  if (error || !data?.link) {
+    redirect(`/properties/${propertyId}?payment=error`);
+  }
+  redirect(data.link);
 }

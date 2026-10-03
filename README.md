@@ -96,9 +96,41 @@ KYB document list; have these ready:
 - [ ] Request Lookup **L3** and reverse geocode (admin names need L2+)
 - [ ] Ask for the credit price per L2/L3 lookup and per reverse geocode
 
+## Billing (Paystack, prepaid, no auto-renew)
+
+Every property starts with 1 free check-in after the free anchor visit. Owners top up from the
+property page: 3 check-ins (₦6,000), Watch 30 days (₦5,000, up to 5 check-ins), Build 30 days
+(₦15,000, unlimited) or Build 12 months (₦150,000). Buying the same plan while it's active extends it.
+
+- `create-payment` records a pending payment and returns a Paystack hosted checkout link
+  (card, bank, USSD, bank transfer).
+- Paystack redirects to `/properties/<id>/paid?reference=…`, which calls `confirm-payment`.
+  `paystack-webhook` does the same from Paystack's side, so bank transfers that confirm late still land.
+- Both re-verify with `GET /transaction/verify/:reference` (status, NGN, amount in kobo) and call
+  `apply_payment`, which applies each payment once.
+- A `before insert` trigger on `checkins` enforces the allowance and spends credits; the app calls
+  `checkin_block_reason` first so reporters aren't sent to the camera with nothing left.
+
+Setup:
+
+1. Paystack dashboard → Settings → API Keys & Webhooks (test mode): copy the **Test Secret Key**
+   (`sk_test_…`).
+2. On the same page, set **Test Webhook URL** to
+   `https://<project-ref>.supabase.co/functions/v1/paystack-webhook`. No secret hash needed:
+   Paystack signs webhooks with your secret key.
+3. Secrets and deploy:
+   ```bash
+   npx supabase secrets set PAYSTACK_SECRET_KEY=sk_test_xxx SITE_URL=https://yourdomain.com
+   npx supabase db push
+   npx supabase functions deploy create-payment confirm-payment
+   npx supabase functions deploy paystack-webhook --no-verify-jwt
+   ```
+4. Test with Paystack's test card, then activate the business (The 36th Solutions Ltd), swap in the
+   live secret key and set the live webhook URL.
+
 ## Not built yet
 
-PDF report export, Stripe billing, owner alerts on flagged/review (hook is marked in
+PDF report export, renewal reminder emails, owner alerts on flagged/review (hook is marked in
 `verify-checkin`), database webhook backstop to retry `pending` check-ins, reporter push
 reminders, the NIPOST postcode widget in onboarding.
 

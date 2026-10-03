@@ -31,6 +31,7 @@ export default function CheckIn() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [blocked, setBlocked] = useState<string | null>(null);
   const cam = useRef<CameraView>(null);
 
   const isAnchor = property !== null && !property.anchored_at;
@@ -46,6 +47,10 @@ export default function CheckIn() {
       ]);
       setProperty(p as Property);
       setMilestones((m ?? []) as Milestone[]);
+      if (p?.anchored_at) {
+        const { data: reason } = await supabase.rpc("checkin_block_reason", { pid: id });
+        if (!cancelled) setBlocked((reason as string | null) ?? null);
+      }
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocPerm(status === "granted");
       if (status === "granted" && !cancelled) {
@@ -118,7 +123,7 @@ export default function CheckIn() {
         photo_paths: paths,
         note: note.trim() || null,
       });
-      if (insErr) throw new Error(insErr.message);
+      if (insErr) throw new Error(insErr.message.replace(/^[A-Z_]+:\s*/, ""));
 
       const { data, error: fnErr } = await supabase.functions.invoke("verify-checkin", { body: { checkin_id: checkinId } });
       if (fnErr) {
@@ -141,6 +146,17 @@ export default function CheckIn() {
         <Text style={[s.h1, { color: verdictColour[result.verdict] }]}>{verdictLabel[result.verdict]}</Text>
         <Text style={s.body}>{result.reason}</Text>
         <Button title="Done" onPress={() => router.back()} />
+      </View>
+    );
+  }
+
+  if (blocked) {
+    return (
+      <View style={[s.screen, s.pad, { gap: 16 }]}>
+        <Text style={s.h2}>{property.label}</Text>
+        <Text style={s.body}>{blocked}</Text>
+        <Text style={s.muted}>Once they top up, come back here and check in as normal. Photos aren&apos;t taken until then.</Text>
+        <Button title="Back" secondary onPress={() => router.back()} />
       </View>
     );
   }

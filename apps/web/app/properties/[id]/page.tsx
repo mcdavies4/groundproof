@@ -4,12 +4,19 @@ import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Checkin, Milestone, Property } from "@/lib/types";
 import { addMilestone, createInvite } from "./actions";
+import { PlanPanel } from "@/components/PlanPanel";
 
 const gbp = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-export default async function PropertyPage({ params }: { params: { id: string } }) {
+export default async function PropertyPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { payment?: string };
+}) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
@@ -104,6 +111,8 @@ export default async function PropertyPage({ params }: { params: { id: string } 
               <dt>Anchored</dt><dd>{property.anchored_at ? when(property.anchored_at) : "Not yet"}</dd>
             </dl>
           </div>
+
+          {isOwner && <PlanPanel property={property} error={searchParams.payment === "error"} />}
 
           {isOwner && (
             <div className="panel">

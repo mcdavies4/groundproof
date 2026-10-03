@@ -1,5 +1,5 @@
 -- Groundproof: initial schema
-create extension if not exists pgcrypto;
+-- gen_random_uuid() is built into Postgres 13+; no extension needed
 
 create type public.verdict as enum ('pending', 'verified', 'review', 'flagged');
 create type public.member_role as enum ('owner', 'reporter');
@@ -68,7 +68,7 @@ alter table public.milestones
 create table public.invites (
   id uuid primary key default gen_random_uuid(),
   property_id uuid not null references public.properties(id) on delete cascade,
-  code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)),
+  code text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 8)),
   created_by uuid not null default auth.uid() references auth.users(id),
   used_by uuid references auth.users(id),
   used_at timestamptz,

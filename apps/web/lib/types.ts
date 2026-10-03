@@ -13,6 +13,9 @@ export interface Property {
   nipost_level: number | null;
   anchored_at: string | null;
   created_at: string;
+  plan: "none" | "watch" | "build";
+  plan_expires_at: string | null;
+  check_credits: number;
 }
 
 export interface Milestone {
@@ -37,3 +40,11 @@ export interface Checkin {
   verdict_reason: string | null;
   nipost_mock: boolean | null;
 }
+
+export const PRODUCTS = {
+  pack3: { name: "3 check-ins", price: "₦6,000", note: "₦2,000 each, no expiry" },
+  watch_30: { name: "Watch, 30 days", price: "₦5,000", note: "Up to 5 check-ins" },
+  build_30: { name: "Build, 30 days", price: "₦15,000", note: "Unlimited check-ins" },
+  build_365: { name: "Build, 12 months", price: "₦150,000", note: "Two months free" },
+} as const;
+export type Product = keyof typeof PRODUCTS;
