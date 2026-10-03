@@ -162,3 +162,7 @@ input:focus { border-color: var(--ink); }
 .buy:hover { border-color: var(--ink); background: #eef1ec; }
 .buy > span:first-child { display: flex; flex-direction: column; }
 .buy-price { font-weight: 800; font-stretch: 85%; white-space: nowrap; }
+
+/* check-in detail */
+.photo-note { margin: 0.6rem 0 0; padding-left: 0.75rem; border-left: 3px solid var(--plate); }
+.checks { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.4rem; }

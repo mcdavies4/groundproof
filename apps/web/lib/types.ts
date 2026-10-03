@@ -39,6 +39,10 @@ export interface Checkin {
   verdict: Verdict;
   verdict_reason: string | null;
   nipost_mock: boolean | null;
+  photo_match: "match" | "mismatch" | "unsure" | "unavailable" | null;
+  photo_note: string | null;
+  heading_ok: boolean | null;
+  is_emulator: boolean;
 }
 
 export const PRODUCTS = {

@@ -96,6 +96,23 @@ KYB document list; have these ready:
 - [ ] Request Lookup **L3** and reverse geocode (admin names need L2+)
 - [ ] Ask for the credit price per L2/L3 lookup and per reverse geocode
 
+## Integrity checks
+
+`verify-checkin` runs four checks in order:
+
+1. **Device:** check-ins from emulators (`expo-device`) or with a mock location are flagged.
+   Set the secret `ALLOW_EMULATOR=true` only while testing on an emulator.
+2. **Location:** NIPOST reverse geocode must return the anchored postcode within 25m, GPS ±20m,
+   non-low confidence, clock drift ≤ 10 min. Wrong building → flagged.
+3. **Compass:** each photo stores the phone's heading. The anchor's first (front) photo sets the
+   reference; a check-in with no photo within 45° of it drops from verified to review.
+4. **Photos:** Claude (`ANTHROPIC_API_KEY`, default model `claude-haiku-4-5-20251001`) compares the
+   check-in photos with the anchor and previous verified photos, and writes a one-line progress note.
+   A mismatch drops verified to review. If the key is missing or the call fails, the verdict stands
+   on location alone.
+
+Location decides verified vs flagged; compass and photos can only downgrade to review.
+
 ## Billing (Paystack, prepaid, no auto-renew)
 
 Every property starts with 1 free check-in after the free anchor visit. Owners top up from the

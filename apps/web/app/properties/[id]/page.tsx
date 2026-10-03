@@ -84,7 +84,21 @@ export default async function PropertyPage({
                     {when(c.server_time)}. {c.verdict_reason ?? "Waiting for NIPOST."}
                     {c.nipost_mock ? " (mock)" : ""}
                   </div>
-                  {c.note && <p style={{ margin: "0.5rem 0 0" }}>{c.note}</p>}
+                  {c.photo_note && (
+                    <p className="photo-note">
+                      <span className="small muted">What the photos show: </span>
+                      {c.photo_note}
+                    </p>
+                  )}
+                  {c.note && <p style={{ margin: "0.5rem 0 0" }}><span className="small muted">Note from your person: </span>{c.note}</p>}
+                  <div className="checks small muted">
+                    {c.photo_match === "match" && <span>Photos match the anchored building</span>}
+                    {c.photo_match === "mismatch" && <span style={{ color: "var(--review)" }}>Photos don&apos;t look like the anchored building</span>}
+                    {c.photo_match === "unsure" && <span>Photos too close-up to compare</span>}
+                    {c.heading_ok === true && <span>Facing the right way</span>}
+                    {c.heading_ok === false && <span style={{ color: "var(--review)" }}>Facing a different way from the anchor</span>}
+                    {c.is_emulator && <span style={{ color: "var(--flagged)" }}>Emulator</span>}
+                  </div>
                   <div className="photos">
                     {c.photo_paths.map((p) =>
                       urls.get(p) ? (

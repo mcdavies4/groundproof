@@ -4,6 +4,8 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as FileSystem from "expo-file-system";
 import * as Crypto from "expo-crypto";
+import * as Device from "expo-device";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { decode } from "base64-arraybuffer";
 import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
@@ -15,8 +17,31 @@ const ANCHOR_PHOTOS = 4;
 
 type Property = { id: string; label: string; postcode: string; anchored_at: string | null };
 type Milestone = { id: string; name: string; completed_checkin_id: string | null };
-type Shot = { uri: string; lat: number; lng: number; accuracy: number; mocked: boolean; time: string };
-type Result = { verdict: keyof typeof verdictLabel; reason: string };
+type Shot = { uri: string; lat: number; lng: number; accuracy: number; mocked: boolean; time: string; heading: number | null };
+
+const ANCHOR_SHOTS = ["the front of the building", "the left side", "the right side", "the street outside"];
+const CHECKIN_SHOTS = [
+  "the front of the building, standing where the first anchor photo was taken",
+  "anything the owner should see",
+  "anything else",
+  "anything else",
+];
+
+/** Compass heading in degrees, or null if the phone can't give one within 3 seconds. */
+async function readHeading(): Promise<number | null> {
+  try {
+    const h = await Promise.race([
+      Location.getHeadingAsync(),
+      new Promise<null>((r) => setTimeout(() => r(null), 3000)),
+    ]);
+    if (!h) return null;
+    const v = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+    return v >= 0 ? Math.round(v * 10) / 10 : null;
+  } catch {
+    return null;
+  }
+}
+type Result = { verdict: keyof typeof verdictLabel; reason: string; note?: string | null };
 
 export default function CheckIn() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,15 +91,19 @@ export default function CheckIn() {
     if (!cam.current) return;
     setCapturing(true); setError(null);
     try {
-      const [photo, loc] = await Promise.all([
-        cam.current.takePictureAsync({ quality: 0.6, exif: false }),
+      const [photo, loc, heading] = await Promise.all([
+        cam.current.takePictureAsync({ quality: 0.8, exif: false }),
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest }),
+        readHeading(),
       ]);
       if (!photo) throw new Error("No photo captured");
+      // Resize before upload: clearer for the photo check, and far less mobile data.
+      const small = await manipulateAsync(photo.uri, [{ resize: { width: 1600 } }], { compress: 0.7, format: SaveFormat.JPEG });
       setShots((prev) => [
         ...prev,
         {
-          uri: photo.uri,
+          uri: small.uri,
+          heading,
           lat: loc.coords.latitude,
           lng: loc.coords.longitude,
           accuracy: loc.coords.accuracy ?? 999,
@@ -121,6 +150,9 @@ export default function CheckIn() {
         is_mocked: mocked,
         device_time: shots[0].time,
         photo_paths: paths,
+        photo_headings: shots.map((x) => x.heading),
+        is_emulator: !Device.isDevice,
+        device_info: { brand: Device.brand, model: Device.modelName, os: `${Device.osName} ${Device.osVersion}` },
         note: note.trim() || null,
       });
       if (insErr) throw new Error(insErr.message.replace(/^[A-Z_]+:\s*/, ""));
@@ -145,6 +177,7 @@ export default function CheckIn() {
       <View style={[s.screen, s.pad, { gap: 16 }]}>
         <Text style={[s.h1, { color: verdictColour[result.verdict] }]}>{verdictLabel[result.verdict]}</Text>
         <Text style={s.body}>{result.reason}</Text>
+        {result.note ? <Text style={[s.muted, { fontStyle: "italic" }]}>{result.note}</Text> : null}
         <Button title="Done" onPress={() => router.back()} />
       </View>
     );
@@ -183,7 +216,8 @@ export default function CheckIn() {
 
       {isAnchor ? (
         <Text style={s.body}>
-          Anchor visit. Stand outside the building and take {ANCHOR_PHOTOS} photos: front, left side, right side, and the street.
+          Anchor visit. Stand outside the building and take {ANCHOR_PHOTOS} photos: front, left side, right side, and the
+          street. Remember where you stood for the front photo; every later check-in starts from that spot.
         </Text>
       ) : milestones.length > 0 ? (
         <View style={{ gap: 8 }}>
@@ -210,6 +244,11 @@ export default function CheckIn() {
         <View style={{ borderRadius: 4, overflow: "hidden", aspectRatio: 3 / 4, backgroundColor: "#000" }}>
           <CameraView ref={cam} style={{ flex: 1 }} facing="back" />
         </View>
+      )}
+      {shots.length < MAX_PHOTOS && (
+        <Text style={[s.body, { fontWeight: "700" }]}>
+          Photo {shots.length + 1}: {(isAnchor ? ANCHOR_SHOTS : CHECKIN_SHOTS)[shots.length]}
+        </Text>
       )}
       {shots.length < MAX_PHOTOS && (
         <Button title={`Take photo ${shots.length + 1}${isAnchor ? ` of ${ANCHOR_PHOTOS}` : ""}`} onPress={takePhoto} busy={capturing} />
