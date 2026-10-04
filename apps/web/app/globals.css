@@ -42,6 +42,9 @@ p { margin: 0 0 1em; max-width: var(--measure); }
 .site-head .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
 .brand { display: inline-flex; align-items: center; text-decoration: none; }
 .brand img { height: 28px; width: auto; display: block; }
+.brand-mark { display: none !important; }
+.site-head nav { align-items: center; }
+.site-head nav a { white-space: nowrap; }
 .site-head nav { display: flex; gap: 1.25rem; font-size: 0.95rem; }
 
 /* buttons and fields */
@@ -178,3 +181,10 @@ input:focus { border-color: var(--ink); }
 
 .check { display: flex; gap: 0.6rem; align-items: center; font-weight: 600; cursor: pointer; }
 .check input { width: 1.2rem; height: 1.2rem; accent-color: var(--ink); }
+
+/* phone header: plate mark only */
+@media (max-width: 560px) {
+  .brand-full { display: none !important; }
+  .brand-mark { display: block !important; height: 30px; }
+  .site-head nav { gap: 1rem; }
+}

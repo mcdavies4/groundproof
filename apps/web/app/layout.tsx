@@ -32,10 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="wrap">
             <Link href="/" className="brand" aria-label="Groundproof home">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/brand/groundproof-logo.svg" alt="Groundproof" width={207} height={28} />
+              <img className="brand-full" src="/brand/groundproof-logo.svg" alt="Groundproof" width={207} height={28} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="brand-mark" src="/brand/groundproof-mark.svg" alt="Groundproof" width={45} height={28} />
             </Link>
             <nav>
-              <Link href="/dashboard">Your properties</Link>
+              <Link href="/dashboard">Properties</Link>
               <Link href="/account">Account</Link>
             </nav>
           </div>
