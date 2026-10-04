@@ -1,6 +1,7 @@
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { GetTheApp } from "@/components/GetTheApp";
 
 export default function Home() {
   return (
@@ -50,7 +51,7 @@ export default function Home() {
             </li>
             <li>
               <h3>Your person on the ground checks in</h3>
-              <p>A relative, contractor or agent uses our app on site. Photos come from the in-app camera only, with location and time attached.</p>
+              <p>A relative, contractor or agent uses <a href="#app">our app</a> on site. Photos come from the in-app camera only, with location and time attached.</p>
             </li>
             <li>
               <h3>Every check-in gets a verdict</h3>
@@ -59,6 +60,8 @@ export default function Home() {
           </ol>
         </div>
       </section>
+
+      <GetTheApp />
 
       <section className="section">
         <div className="wrap">
