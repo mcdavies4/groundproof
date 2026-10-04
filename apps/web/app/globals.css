@@ -40,7 +40,8 @@ p { margin: 0 0 1em; max-width: var(--measure); }
 /* header */
 .site-head { border-bottom: 1px solid var(--concrete); }
 .site-head .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-.brand { font-weight: 800; font-stretch: 118%; font-size: 1.2rem; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; text-decoration: none; }
+.brand img { height: 28px; width: auto; display: block; }
 .site-head nav { display: flex; gap: 1.25rem; font-size: 0.95rem; }
 
 /* buttons and fields */
