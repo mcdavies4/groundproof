@@ -3,7 +3,7 @@ export type Verdict = "pending" | "verified" | "review" | "flagged";
 export interface Property {
   id: string;
   label: string;
-  postcode: string;
+  postcode: string | null;
   nipost_address: {
     administrative: { state_name?: string; lga_name?: string; locality_name?: string; zone?: string } | null;
     recent_house_address: string | null;
@@ -13,6 +13,8 @@ export interface Property {
   nipost_level: number | null;
   anchored_at: string | null;
   created_at: string;
+  anchor_mode: "postcode" | "coordinates" | null;
+  nipost_suggested_postcode: string | null;
   plan: "none" | "watch" | "build";
   plan_expires_at: string | null;
   check_credits: number;
@@ -43,6 +45,8 @@ export interface Checkin {
   photo_note: string | null;
   heading_ok: boolean | null;
   is_emulator: boolean;
+  match_type: "postcode" | "coordinates" | null;
+  distance_from_anchor_m: number | null;
 }
 
 export const PRODUCTS = {
