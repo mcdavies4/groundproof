@@ -16,11 +16,11 @@ export default async function Dashboard() {
     .order("created_at", { ascending: false });
 
   const ids = (properties ?? []).map((p) => p.id);
-  const latest = new Map<string, { verdict: Verdict; server_time: string }>();
+  const latest = new Map<string, { verdict: Verdict; server_time: string; match_type: "postcode" | "coordinates" | null }>();
   if (ids.length) {
     const { data: checkins } = await supabase
       .from("checkins")
-      .select("property_id, verdict, server_time")
+      .select("property_id, verdict, server_time, match_type")
       .in("property_id", ids)
       .order("server_time", { ascending: false });
     for (const c of checkins ?? []) if (!latest.has(c.property_id)) latest.set(c.property_id, c);
@@ -36,7 +36,7 @@ export default async function Dashboard() {
       {(properties ?? []).length === 0 ? (
         <div className="empty">
           <h2>Add the first property you want watched</h2>
-          <p>You&apos;ll need its NIPOST postcode. Whoever is at the house can find it on postcode.gov.ng by allowing location access.</p>
+          <p>If you know its NIPOST postcode, have it ready. If not, your person on the ground finds it at their first visit.</p>
           <Link className="btn" href="/properties/new">Add a property</Link>
         </div>
       ) : (
@@ -54,8 +54,8 @@ export default async function Dashboard() {
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <PostcodePlate code={p.postcode} size="sm" />
-                    {last && <div style={{ marginTop: "0.4rem" }}><VerdictBadge verdict={last.verdict} /></div>}
+                    {p.postcode ? <PostcodePlate code={p.postcode} size="sm" /> : <span className="small muted">{p.anchor_mode === "coordinates" ? "Anchored by location" : "Postcode found on first visit"}</span>}
+                    {last && <div style={{ marginTop: "0.4rem" }}><VerdictBadge verdict={last.verdict} matchType={last.match_type} /></div>}
                   </div>
                 </Link>
               </li>

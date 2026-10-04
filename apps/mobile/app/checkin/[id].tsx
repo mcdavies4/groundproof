@@ -14,7 +14,7 @@ import { Button, Plate, verdictColour, verdictLabel } from "@/lib/ui";
 const MAX_PHOTOS = 4;
 const ANCHOR_PHOTOS = 4;
 
-type Property = { id: string; label: string; postcode: string; anchored_at: string | null };
+type Property = { id: string; label: string; postcode: string | null; anchored_at: string | null };
 type Milestone = { id: string; name: string; completed_checkin_id: string | null };
 type Shot = { uri: string; lat: number; lng: number; accuracy: number; mocked: boolean; time: string; heading: number | null };
 
@@ -40,7 +40,13 @@ async function readHeading(): Promise<number | null> {
     return null;
   }
 }
-type Result = { verdict: keyof typeof verdictLabel; reason: string; note?: string | null };
+type Result = { verdict: keyof typeof verdictLabel; reason: string; note?: string | null; match_type?: "postcode" | "coordinates" };
+type Find =
+  | { status: "idle" | "searching" }
+  | { status: "found"; postcode: string; distance_m: number }
+  | { status: "not_listed" }
+  | { status: "weak_gps"; accuracy: number }
+  | { status: "error"; error: string };
 
 export default function CheckIn() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -56,9 +62,13 @@ export default function CheckIn() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [find, setFind] = useState<Find>({ status: "idle" });
+  const [anchorChoice, setAnchorChoice] = useState<"postcode" | "coordinates" | null>(null);
+  const [claimedPostcode, setClaimedPostcode] = useState<string | null>(null);
   const cam = useRef<CameraView>(null);
 
   const isAnchor = property !== null && !property.anchored_at;
+  const needsFind = isAnchor && !property?.postcode && anchorChoice === null;
   const needed = isAnchor ? ANCHOR_PHOTOS : 1;
 
   useEffect(() => {
@@ -120,6 +130,21 @@ export default function CheckIn() {
     }
   }
 
+  async function findBuilding() {
+    if (!property) return;
+    setFind({ status: "searching" });
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      const { data, error: fnErr } = await supabase.functions.invoke("find-postcode", {
+        body: { property_id: property.id, lat: loc.coords.latitude, lng: loc.coords.longitude, accuracy: loc.coords.accuracy ?? 999 },
+      });
+      if (fnErr || !data?.status) throw new Error("NIPOST didn't answer. Try again in a minute.");
+      setFind(data as Find);
+    } catch (e) {
+      setFind({ status: "error", error: (e as Error).message });
+    }
+  }
+
   async function submit() {
     if (!property) return;
     setSubmitting(true); setError(null);
@@ -146,6 +171,8 @@ export default function CheckIn() {
         reporter_id: auth.user!.id,
         milestone_id: isAnchor ? null : milestoneId,
         is_anchor: isAnchor,
+        anchor_choice: isAnchor && !property.postcode ? anchorChoice : null,
+        claimed_postcode: isAnchor && !property.postcode && anchorChoice === "postcode" ? claimedPostcode : null,
         lat: best.lat,
         lng: best.lng,
         gps_accuracy_m: best.accuracy,
@@ -177,7 +204,9 @@ export default function CheckIn() {
   if (result) {
     return (
       <View style={[s.screen, s.pad, { gap: 16 }]}>
-        <Text style={[s.h1, { color: verdictColour[result.verdict] }]}>{verdictLabel[result.verdict]}</Text>
+        <Text style={[s.h1, { color: verdictColour[result.verdict] }]}>
+          {result.verdict === "verified" && result.match_type === "coordinates" ? "Location match" : verdictLabel[result.verdict]}
+        </Text>
         <Text style={s.body}>{result.reason}</Text>
         {result.note ? <Text style={[s.muted, { fontStyle: "italic" }]}>{result.note}</Text> : null}
         <Button title="Done" onPress={() => router.back()} />
@@ -193,6 +222,56 @@ export default function CheckIn() {
         <Text style={s.muted}>Once they top up, come back here and check in as normal. Photos aren&apos;t taken until then.</Text>
         <Button title="Back" secondary onPress={() => router.back()} />
       </View>
+    );
+  }
+
+  if (needsFind && locPerm !== false) {
+    return (
+      <ScrollView style={s.screen} contentContainerStyle={[s.pad, { gap: 16 }]}>
+        <Text style={s.h2}>{property.label}</Text>
+        <Text style={s.body}>
+          First, find this building&apos;s NIPOST postcode. Stand outside the building, in the open, then tap the button.
+        </Text>
+
+        {(find.status === "idle" || find.status === "searching") && (
+          <Button title="Find this building" onPress={findBuilding} busy={find.status === "searching"} />
+        )}
+
+        {find.status === "found" && (
+          <View style={{ gap: 14 }}>
+            <Text style={s.body}>NIPOST says you&apos;re standing at:</Text>
+            <Plate code={find.postcode} />
+            <Text style={s.muted}>{find.distance_m}m away. Is this the building you&apos;re checking in for?</Text>
+            <Button title="Yes, this is the building" onPress={() => { setClaimedPostcode(find.postcode); setAnchorChoice("postcode"); }} />
+            <Button title="No, it's a different building" secondary onPress={() => setAnchorChoice("coordinates")} />
+          </View>
+        )}
+
+        {find.status === "not_listed" && (
+          <View style={{ gap: 14 }}>
+            <Text style={s.body}>
+              NIPOST hasn&apos;t listed a building here yet. That&apos;s common for new builds. We&apos;ll lock this property
+              to this exact spot instead, and match future check-ins by location.
+            </Text>
+            <Button title="Continue" onPress={() => setAnchorChoice("coordinates")} />
+            <Button title="Search again" secondary onPress={findBuilding} />
+          </View>
+        )}
+
+        {find.status === "weak_gps" && (
+          <View style={{ gap: 14 }}>
+            <Text style={s.body}>GPS is too weak right now (±{find.accuracy}m). Step away from walls and roofs, wait a few seconds, and try again.</Text>
+            <Button title="Try again" onPress={findBuilding} />
+          </View>
+        )}
+
+        {find.status === "error" && (
+          <View style={{ gap: 14 }}>
+            <Text style={s.error}>{find.error}</Text>
+            <Button title="Try again" onPress={findBuilding} />
+          </View>
+        )}
+      </ScrollView>
     );
   }
 
@@ -213,7 +292,11 @@ export default function CheckIn() {
     <ScrollView style={s.screen} contentContainerStyle={[s.pad, { gap: 16 }]}>
       <View style={{ gap: 8 }}>
         <Text style={s.h2}>{property.label}</Text>
-        <Plate code={property.postcode} />
+        {property.postcode || claimedPostcode ? (
+          <Plate code={(property.postcode ?? claimedPostcode)!} />
+        ) : (
+          <Text style={s.muted}>Anchoring to this exact spot</Text>
+        )}
       </View>
 
       {isAnchor ? (

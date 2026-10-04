@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { c, s } from "@/lib/theme";
 import { Button, Plate } from "@/lib/ui";
 
-type Row = { id: string; label: string; postcode: string; anchored_at: string | null };
+type Row = { id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_mode: string | null };
 
 const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? "https://groundproof-sigma.vercel.app";
 
@@ -44,7 +44,7 @@ export default function Properties() {
     const { data: user } = await supabase.auth.getUser();
     const { data } = await supabase
       .from("property_members")
-      .select("properties(id, label, postcode, anchored_at)")
+      .select("properties(id, label, postcode, anchored_at, anchor_mode)")
       .eq("user_id", user.user?.id ?? "")
       .eq("role", "reporter");
     setRows((data ?? []).map((r: any) => r.properties).filter(Boolean));
@@ -90,8 +90,18 @@ export default function Properties() {
             })}
           >
             <Text style={[s.body, { fontWeight: "700", fontSize: 18 }]}>{item.label}</Text>
-            <Plate code={item.postcode} />
-            <Text style={s.muted}>{item.anchored_at ? "Tap to check in" : "Anchor visit needed. Do it at the house."}</Text>
+            {item.postcode ? (
+              <Plate code={item.postcode} />
+            ) : (
+              <Text style={s.muted}>{item.anchor_mode === "coordinates" ? "Anchored by location" : "Postcode not set yet"}</Text>
+            )}
+            <Text style={s.muted}>
+              {item.anchored_at
+                ? "Tap to check in"
+                : item.postcode
+                  ? "Anchor visit needed. Do it at the house."
+                  : "First visit: find the postcode and anchor it. Do it at the house."}
+            </Text>
           </Pressable>
         )}
         ListFooterComponent={

@@ -7,6 +7,7 @@ const LABEL: Record<Verdict, string> = {
   pending: "Checking with NIPOST",
 };
 
-export function VerdictBadge({ verdict }: { verdict: Verdict }) {
-  return <span className={`verdict ${verdict}`}>{LABEL[verdict]}</span>;
+export function VerdictBadge({ verdict, matchType }: { verdict: Verdict; matchType?: "postcode" | "coordinates" | null }) {
+  const label = verdict === "verified" && matchType === "coordinates" ? "Location match" : LABEL[verdict];
+  return <span className={`verdict ${verdict}`}>{label}</span>;
 }

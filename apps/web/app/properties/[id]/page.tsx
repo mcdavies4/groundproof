@@ -51,9 +51,22 @@ export default async function PropertyPage({
       <div className="page-head">
         <div>
           <h1 style={{ marginBottom: "0.6rem" }}>{property.label}</h1>
-          <PostcodePlate code={property.postcode} size="md" />
+          {property.postcode ? (
+            <PostcodePlate code={property.postcode} size="md" />
+          ) : property.anchor_mode === "coordinates" ? (
+            <p className="muted" style={{ margin: 0 }}>Anchored by location. NIPOST has no building listed here yet.</p>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>Postcode to be found on the first visit.</p>
+          )}
         </div>
       </div>
+
+      {property.anchor_mode === "coordinates" && property.nipost_suggested_postcode && (
+        <p className="notice">
+          NIPOST now lists a building at this spot: <strong>{property.nipost_suggested_postcode}</strong>. If that&apos;s
+          your property, email us and we&apos;ll switch it to full postcode checks.
+        </p>
+      )}
 
       {property.nipost_address?.mock && (
         <p className="notice">This property was checked against the NIPOST mock, not the live registry. Address details are test data.</p>
@@ -65,7 +78,11 @@ export default async function PropertyPage({
           {!property.anchored_at && (
             <div className="empty" style={{ marginBottom: "1.5rem" }}>
               <h3>Waiting for the anchor visit</h3>
-              <p>Share the invite code with your person on the ground. Their first visit, made from inside the app at the house, locks this property to its building.</p>
+              <p>
+                {property.postcode
+                  ? "Share the invite code with your person on the ground. Their first visit, made from inside the app at the house, locks this property to its building."
+                  : "Share the invite code with your person on the ground. At their first visit the app finds the NIPOST postcode for the building they're standing at, or, if it isn't registered yet, locks the property to that exact spot."}
+              </p>
             </div>
           )}
           {(checkins ?? []).length === 0 ? (
@@ -78,7 +95,7 @@ export default async function PropertyPage({
                     <strong>
                       {c.is_anchor ? "Anchor visit" : c.milestone_id ? msName.get(c.milestone_id) ?? "Milestone" : "Routine check-in"}
                     </strong>
-                    <VerdictBadge verdict={c.verdict} />
+                    <VerdictBadge verdict={c.verdict} matchType={c.match_type} />
                   </div>
                   <div className="small muted">
                     {when(c.server_time)}. {c.verdict_reason ?? "Waiting for NIPOST."}

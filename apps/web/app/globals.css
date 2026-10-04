@@ -175,3 +175,6 @@ input:focus { border-color: var(--ink); }
 .legal li { margin-bottom: 0.5rem; }
 .legal-links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
 .legal-links span { flex-basis: 100%; }
+
+.check { display: flex; gap: 0.6rem; align-items: center; font-weight: 600; cursor: pointer; }
+.check input { width: 1.2rem; height: 1.2rem; accent-color: var(--ink); }
