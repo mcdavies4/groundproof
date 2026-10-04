@@ -11,7 +11,7 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://groundproof-sigma.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://groundproof.site"),
   openGraph: {
     title: "Groundproof",
     description: "Your contractor sent photos. Were they taken at your house? Check-ins verified against the NIPOST postcode.",

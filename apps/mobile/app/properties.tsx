@@ -7,7 +7,7 @@ import { Button, Plate } from "@/lib/ui";
 
 type Row = { id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_mode: string | null };
 
-const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? "https://groundproof-sigma.vercel.app";
+const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? "https://groundproof.site";
 
 function confirmDelete() {
   Alert.alert(
