@@ -2,11 +2,11 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
-import type { Checkin, Milestone, Property } from "@/lib/types";
-import { addMilestone, createInvite } from "./actions";
+import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
+import { addMilestone, createInvite, setCurrency } from "./actions";
+import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
 
-const gbp = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -169,11 +169,12 @@ export default async function PropertyPage({
             <ul className="milestones">
               {ms.map((m) => (
                 <li key={m.id}>
-                  <span>{m.name}{m.amount_gbp !== null && <span className="muted"> ({gbp.format(Number(m.amount_gbp))})</span>}</span>
+                  <span>{m.name}{m.amount !== null && <span className="muted"> ({formatMoney(Number(m.amount), property.payment_currency ?? "NGN")})</span>}</span>
                   {m.completed_checkin_id ? <span className="verdict verified">Done</span> : <span className="small muted">Open</span>}
                 </li>
               ))}
             </ul>
+            {isOwner && <CurrencySelect action={setCurrency.bind(null, property.id)} value={property.payment_currency ?? "NGN"} />}
             {isOwner && (
               <form action={addMilestone.bind(null, property.id)}>
                 <div className="field">
@@ -181,8 +182,9 @@ export default async function PropertyPage({
                   <input id="ms-name" name="name" type="text" required maxLength={80} placeholder="Roofing" />
                 </div>
                 <div className="field">
-                  <label htmlFor="ms-amount">Payment (£, optional)</label>
-                  <input id="ms-amount" name="amount" type="number" min="0" step="0.01" />
+                  <label htmlFor="ms-amount">Payment amount (optional)</label>
+                  <input id="ms-amount" name="amount" type="number" min="0" step="0.01" inputMode="decimal" />
+                  <p className="hint">Only for your own reference. Groundproof never sends or holds money.</p>
                 </div>
                 <button className="btn secondary" type="submit">Add stage</button>
               </form>

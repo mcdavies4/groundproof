@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Product } from "@/lib/types";
+import { CURRENCIES, type Currency, type Product } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 
 export async function addMilestone(propertyId: string, form: FormData) {
@@ -20,7 +20,7 @@ export async function addMilestone(propertyId: string, form: FormData) {
   await supabase.from("milestones").insert({
     property_id: propertyId,
     name,
-    amount_gbp: amount !== null && Number.isFinite(amount) ? amount : null,
+    amount: amount !== null && Number.isFinite(amount) && amount >= 0 ? amount : null,
     sort: count ?? 0,
   });
   revalidatePath(`/properties/${propertyId}`);
@@ -41,4 +41,12 @@ export async function startCheckout(propertyId: string, product: Product) {
     redirect(`/properties/${propertyId}?payment=error`);
   }
   redirect(data.link);
+}
+
+export async function setCurrency(propertyId: string, form: FormData) {
+  const currency = String(form.get("currency") ?? "") as Currency;
+  if (!(currency in CURRENCIES)) return;
+  const supabase = createClient();
+  await supabase.from("properties").update({ payment_currency: currency }).eq("id", propertyId);
+  revalidatePath(`/properties/${propertyId}`);
 }

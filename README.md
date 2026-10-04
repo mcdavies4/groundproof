@@ -116,6 +116,13 @@ KYB document list; have these ready:
    A mismatch drops verified to review. If the key is missing or the call fails, the verdict stands
    on location alone.
 
+**No postcode yet?** Owners can add a property without one. At the anchor visit the reporter taps
+"Find this building" (`find-postcode` → NIPOST reverse geocode). If NIPOST lists a building within 25m,
+the reporter confirms it and the property becomes postcode-anchored. If not (common for new builds), it is
+anchored to the exact GPS spot (`anchor_mode = 'coordinates'`): later check-ins verify by distance from that
+spot (≤25m verified, 25–60m review, >60m flagged) and show as "Location match". If NIPOST later lists a
+building there, `nipost_suggested_postcode` is set and the owner is told.
+
 Location decides verified vs flagged; compass and photos can only downgrade to review.
 
 ## Billing (Paystack, prepaid, no auto-renew)

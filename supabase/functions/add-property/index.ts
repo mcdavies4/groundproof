@@ -10,10 +10,27 @@ Deno.serve(async (req) => {
   const user = await getCaller(req);
   if (!user) return json({ error: "Sign in to add a property" }, 401);
 
-  const { label, postcode } = await req.json().catch(() => ({}));
+  const { label, postcode, unknown } = await req.json().catch(() => ({}));
   if (!label || typeof label !== "string" || label.trim().length === 0) {
     return json({ error: "Give the property a name, for example \"Mum's house, Enugu\"" }, 400);
   }
+
+  // Postcode not known yet: the reporter finds it on site at the anchor visit.
+  if (unknown === true) {
+    const db = adminClient();
+    const { data: property, error } = await db.from("properties")
+      .insert({ owner_id: user.id, label: label.trim(), postcode: null })
+      .select().single();
+    if (error) return json({ error: error.message }, 500);
+    const { error: memberErr } = await db.from("property_members")
+      .insert({ property_id: property.id, user_id: user.id, role: "owner" });
+    if (memberErr) {
+      await db.from("properties").delete().eq("id", property.id);
+      return json({ error: memberErr.message }, 500);
+    }
+    return json({ property });
+  }
+
   const code = normalisePostcode(String(postcode ?? ""));
   if (!code) {
     return json({ error: "That postcode isn't in NIPOST format. It looks like LA-11-W06-TC-10." }, 400);

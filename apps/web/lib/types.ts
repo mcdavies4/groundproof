@@ -15,6 +15,7 @@ export interface Property {
   created_at: string;
   anchor_mode: "postcode" | "coordinates" | null;
   nipost_suggested_postcode: string | null;
+  payment_currency: Currency;
   plan: "none" | "watch" | "build";
   plan_expires_at: string | null;
   check_credits: number;
@@ -23,7 +24,7 @@ export interface Property {
 export interface Milestone {
   id: string;
   name: string;
-  amount_gbp: number | null;
+  amount: number | null;
   sort: number;
   completed_checkin_id: string | null;
 }
@@ -56,3 +57,22 @@ export const PRODUCTS = {
   build_365: { name: "Build, 12 months", price: "₦150,000", note: "Two months free" },
 } as const;
 export type Product = keyof typeof PRODUCTS;
+
+export const CURRENCIES = {
+  NGN: "Naira (₦)",
+  GBP: "Pounds (£)",
+  USD: "US dollars ($)",
+  EUR: "Euros (€)",
+  CAD: "Canadian dollars (CA$)",
+} as const;
+export type Currency = keyof typeof CURRENCIES;
+
+export function formatMoney(amount: number, currency: Currency) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    // ₦ needs the narrow symbol; others keep theirs so CA$ and US$ stay distinct.
+    currencyDisplay: currency === "NGN" ? "narrowSymbol" : "symbol",
+    maximumFractionDigits: currency === "NGN" ? 0 : 2,
+  }).format(amount);
+}
