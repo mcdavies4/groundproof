@@ -182,9 +182,12 @@ input:focus { border-color: var(--ink); }
 .check { display: flex; gap: 0.6rem; align-items: center; font-weight: 600; cursor: pointer; }
 .check input { width: 1.2rem; height: 1.2rem; accent-color: var(--ink); }
 
-/* phone header: plate mark only */
+/* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
+  .brand img.brand-full { height: 21px; }
+  .site-head nav { gap: 0.9rem; font-size: 0.9rem; }
+}
+@media (max-width: 359px) {
   .brand-full { display: none !important; }
-  .brand-mark { display: block !important; height: 30px; }
-  .site-head nav { gap: 1rem; }
+  .brand-mark { display: block !important; height: 28px; }
 }
