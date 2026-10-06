@@ -149,3 +149,64 @@ export function nearestPlace(p: LatLng) {
   for (const pl of PLACES) { const d = distanceM(p, pl); if (d < bestD) { bestD = d; best = pl; } }
   return { name: best.name, km: Math.round(bestD / 1000) };
 }
+
+// ---------- plans that give one starting point plus bearings and distances ----------
+
+/**
+ * Bearing as written on a plan, to decimal degrees.
+ * Accepts 123°45'30", 123° 45', 123 45 30, 123-45-30, 123.7583. Returns null if unreadable or out of range.
+ */
+export function parseBearing(text: string): number | null {
+  const parts = text.trim().replace(/[°º'’′"”″:-]/g, " ").split(/\s+/).filter(Boolean).map(Number);
+  if (!parts.length || parts.some((p) => !Number.isFinite(p))) return null;
+  const [d, m = 0, s = 0] = parts;
+  if (parts.length > 3 || m >= 60 || s >= 60 || m < 0 || s < 0) return null;
+  const deg = d + m / 60 + s / 3600;
+  return deg >= 0 && deg < 360 ? deg : null;
+}
+
+export interface Leg { to: string; bearing: number; distance: number }
+
+/**
+ * Walk round the plot from a known starting beacon using each side's grid bearing and distance.
+ * If the last leg returns to the start, misclosure is how far the walk ends from where it began:
+ * a well-drawn plan closes to a few centimetres.
+ */
+export function traverse(start: Beacon, legs: Leg[]) {
+  const pts: Beacon[] = [start];
+  let { e, n } = start;
+  for (const leg of legs) {
+    const r = (leg.bearing * Math.PI) / 180;
+    e += leg.distance * Math.sin(r);
+    n += leg.distance * Math.cos(r);
+    pts.push({ id: leg.to, e, n });
+  }
+  const last = pts[pts.length - 1];
+  const closesOnStart = legs.length > 0 && legs[legs.length - 1].to.trim().toLowerCase() === start.id.trim().toLowerCase();
+  const misclosure = closesOnStart ? Math.hypot(last.e - start.e, last.n - start.n) : null;
+  return { beacons: closesOnStart ? pts.slice(0, -1) : pts, misclosure };
+}
+
+// ---------- reading coordinates pasted from a plan ----------
+
+/**
+ * One line of a plan's coordinate list to {id, e, n}.
+ * Handles labelled values in either order ("N 724 512.33  E 541 230.11", "E: 541230.11, N: 724512.33"),
+ * spaces or commas as thousands separators, and unlabelled "name easting northing".
+ */
+export function parseCoordinateLine(line: string): { id: string; e: string; n: string } | null {
+  const num = String.raw`(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)`;
+  const eM = line.match(new RegExp(String.raw`\b(?:E|Easting)\s*[:=]?\s*` + num, "i"));
+  const nM = line.match(new RegExp(String.raw`\b(?:N|Northing)\s*[:=]?\s*` + num, "i"));
+  const clean = (s: string) => s.replace(/[ ,]/g, "");
+  if (eM && nM) {
+    const first = Math.min(eM.index!, nM.index!);
+    return { id: line.slice(0, first).replace(/[,\t]+/g, " ").trim(), e: clean(eM[1]), n: clean(nM[1]) };
+  }
+  const raw = line.match(/-?\d[\d,]*\.?\d*/g) ?? [];
+  if (raw.length < 2) return null;
+  const rawE = raw[raw.length - 2], rawN = raw[raw.length - 1];
+  const posN = line.lastIndexOf(rawN);
+  const id = line.slice(0, line.lastIndexOf(rawE, posN - 1)).replace(/[,\t]+/g, " ").trim();
+  return { id, e: rawE.replace(/,/g, ""), n: rawN.replace(/,/g, "") };
+}

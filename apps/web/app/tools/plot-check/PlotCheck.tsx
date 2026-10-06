@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import {
-  SYSTEMS, candidates, centroid, dms, distanceM, nearestPlace, polygonArea, sides, toWGS84,
-  type Beacon, type SystemId,
+  SYSTEMS, candidates, centroid, dms, distanceM, nearestPlace, parseBearing, parseCoordinateLine, polygonArea, sides,
+  toWGS84, traverse, type Beacon, type SystemId,
 } from "@/lib/survey";
 
 type Row = { id: string; e: string; n: string };
@@ -16,18 +16,15 @@ function num(v: string) {
   return Number.isFinite(x) && v.trim() !== "" ? x : null;
 }
 
-/** "PB 1234  543210.12  712345.67" per line -> rows. Takes the last two numbers on each line as E then N. */
 function parsePaste(text: string): Row[] {
-  return text.split(/\r?\n/).map((line) => {
-    const raw = line.match(/-?\d[\d,]*\.?\d*/g) ?? [];
-    if (raw.length < 2) return null;
-    const rawE = raw[raw.length - 2], rawN = raw[raw.length - 1];
-    // name = everything before the easting
-    const posN = line.lastIndexOf(rawN);
-    const id = line.slice(0, line.lastIndexOf(rawE, posN - 1)).replace(/[,\t]+/g, " ").trim();
-    return { id, e: rawE.replace(/,/g, ""), n: rawN.replace(/,/g, "") };
-  }).filter((r): r is Row => r !== null);
+  return text.split(/\r?\n/).map(parseCoordinateLine).filter((r): r is Row => r !== null);
 }
+
+type LegRow = { to: string; bearing: string; distance: string };
+const EMPTY_LEGS: LegRow[] = [
+  { to: "", bearing: "", distance: "" }, { to: "", bearing: "", distance: "" },
+  { to: "", bearing: "", distance: "" }, { to: "", bearing: "", distance: "" },
+];
 
 const mapsLink = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat.toFixed(7)},${lng.toFixed(7)}`;
 
@@ -36,11 +33,31 @@ export function PlotCheck() {
   const [system, setSystem] = useState<SystemId | "unsure">("unsure");
   const [statedArea, setStatedArea] = useState("");
   const [paste, setPaste] = useState("");
+  const [mode, setMode] = useState<"all" | "traverse">("all");
+  const [start, setStart] = useState<Row>({ id: "", e: "", n: "" });
+  const [legs, setLegs] = useState<LegRow[]>(EMPTY_LEGS);
 
-  const beacons: Beacon[] = useMemo(
-    () => rows.map((r, i) => ({ id: r.id.trim() || `B${i + 1}`, e: num(r.e)!, n: num(r.n)! })).filter((b) => b.e !== null && b.n !== null),
-    [rows],
-  );
+  const walked = useMemo(() => {
+    if (mode !== "traverse") return null;
+    const se = num(start.e), sn = num(start.n);
+    if (se === null || sn === null) return null;
+    const startId = start.id.trim() || "Start";
+    const parsed = legs
+      .map((l, i) => ({
+        // a blank name on the last side means "back to the start", matching its placeholder
+        to: l.to.trim() || (i === legs.length - 1 ? startId : `B${i + 2}`),
+        bearing: parseBearing(l.bearing),
+        distance: num(l.distance),
+      }))
+      .filter((l): l is { to: string; bearing: number; distance: number } => l.bearing !== null && l.distance !== null);
+    if (parsed.length < 2) return null;
+    return traverse({ id: startId, e: se, n: sn }, parsed);
+  }, [mode, start, legs]);
+
+  const beacons: Beacon[] = useMemo(() => {
+    if (mode === "traverse") return walked?.beacons ?? [];
+    return rows.map((r, i) => ({ id: r.id.trim() || `B${i + 1}`, e: num(r.e)!, n: num(r.n)! })).filter((b) => b.e !== null && b.n !== null);
+  }, [mode, rows, walked]);
 
   const result = useMemo(() => {
     if (beacons.length < 3) return null;
@@ -84,42 +101,95 @@ export function PlotCheck() {
   return (
     <div className="plot-grid">
       <section>
-        <h2>1. Beacon coordinates</h2>
-        <p className="small muted">
-          On the survey plan, each corner beacon (e.g. PB 1234 or SC/OG 5678) has an easting (E) and northing (N). Enter them in
-          order going round the plot.
-        </p>
-
-        <details className="paste">
-          <summary>Paste them all at once</summary>
-          <textarea
-            value={paste}
-            onChange={(e) => setPaste(e.target.value)}
-            rows={5}
-            placeholder={"PB 1234  560024.54  269789.00\nPB 1235  560042.54  269789.00\n…"}
-          />
-          <button className="btn secondary" type="button" onClick={() => { const r = parsePaste(paste); if (r.length) setRows(r); }}>
-            Use these
-          </button>
-          <p className="hint">One beacon per line: name, then easting, then northing.</p>
-        </details>
-
-        <div className="beacon-table" role="table">
-          <div className="beacon-row head" role="row"><span>Beacon</span><span>Easting (E)</span><span>Northing (N)</span><span /></div>
-          {rows.map((r, i) => (
-            <div className="beacon-row" role="row" key={i}>
-              <input aria-label={`Beacon ${i + 1} name`} value={r.id} placeholder={`B${i + 1}`}
-                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, id: e.target.value } : x)))} />
-              <input aria-label={`Beacon ${i + 1} easting`} inputMode="decimal" value={r.e}
-                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, e: e.target.value } : x)))} />
-              <input aria-label={`Beacon ${i + 1} northing`} inputMode="decimal" value={r.n}
-                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, n: e.target.value } : x)))} />
-              <button type="button" className="remove" aria-label={`Remove beacon ${i + 1}`}
-                onClick={() => setRows(rows.length > 3 ? rows.filter((_, j) => j !== i) : rows)}>×</button>
-            </div>
-          ))}
+        <h2>1. What the plan gives you</h2>
+        <div className="mode-toggle" role="radiogroup" aria-label="How the plan gives the corners">
+          <label className={mode === "all" ? "on" : ""}>
+            <input type="radio" name="mode" checked={mode === "all"} onChange={() => setMode("all")} />
+            Coordinates for every corner
+          </label>
+          <label className={mode === "traverse" ? "on" : ""}>
+            <input type="radio" name="mode" checked={mode === "traverse"} onChange={() => setMode("traverse")} />
+            One starting point, then bearings and distances
+          </label>
         </div>
-        <button type="button" className="btn secondary" onClick={() => setRows([...rows, { id: "", e: "", n: "" }])}>Add a beacon</button>
+
+        {mode === "all" ? (
+          <>
+            <p className="small muted">
+              Each corner of the plot has a beacon number, with its easting (E) and northing (N) written beside it or in a
+              table. Enter them in order going round the plot. Some plans write N before E: check the labels.
+            </p>
+
+            <details className="paste">
+              <summary>Paste them all at once</summary>
+              <textarea
+                value={paste}
+                onChange={(e) => setPaste(e.target.value)}
+                rows={5}
+                placeholder={"Beacon number, easting, northing, one per line.\nLabelled lines like N 724 512.33  E 541 230.11 also work."}
+              />
+              <button className="btn secondary" type="button" onClick={() => { const r = parsePaste(paste); if (r.length) setRows(r); }}>
+                Use these
+              </button>
+            </details>
+
+            <div className="beacon-table" role="table">
+              <div className="beacon-row head" role="row"><span>Beacon</span><span>Easting (E)</span><span>Northing (N)</span><span /></div>
+              {rows.map((r, i) => (
+                <div className="beacon-row" role="row" key={i}>
+                  <input aria-label={`Beacon ${i + 1} number`} value={r.id} placeholder={`B${i + 1}`}
+                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, id: e.target.value } : x)))} />
+                  <input aria-label={`Beacon ${i + 1} easting`} inputMode="decimal" value={r.e}
+                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, e: e.target.value } : x)))} />
+                  <input aria-label={`Beacon ${i + 1} northing`} inputMode="decimal" value={r.n}
+                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, n: e.target.value } : x)))} />
+                  <button type="button" className="remove" aria-label={`Remove beacon ${i + 1}`}
+                    onClick={() => setRows(rows.length > 3 ? rows.filter((_, j) => j !== i) : rows)}>×</button>
+                </div>
+              ))}
+            </div>
+            <div className="row-links">
+              <button type="button" className="btn secondary" onClick={() => setRows([...rows, { id: "", e: "", n: "" }])}>Add a beacon</button>
+              <button type="button" className="link-btn" onClick={() => setRows(rows.map((r) => ({ ...r, e: r.n, n: r.e })))}>
+                Swap E and N
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="small muted">
+              Some plans give coordinates for one point only, then the bearing and length of each side. Enter the starting
+              beacon, then each side in order. Make the last side end back at the starting beacon so we can check the figures.
+            </p>
+            <div className="beacon-table" role="table">
+              <div className="beacon-row head" role="row"><span>Start beacon</span><span>Easting (E)</span><span>Northing (N)</span><span /></div>
+              <div className="beacon-row" role="row">
+                <input aria-label="Starting beacon number" value={start.id} placeholder="Start" onChange={(e) => setStart({ ...start, id: e.target.value })} />
+                <input aria-label="Starting easting" inputMode="decimal" value={start.e} onChange={(e) => setStart({ ...start, e: e.target.value })} />
+                <input aria-label="Starting northing" inputMode="decimal" value={start.n} onChange={(e) => setStart({ ...start, n: e.target.value })} />
+                <span />
+              </div>
+            </div>
+            <div className="beacon-table" role="table">
+              <div className="beacon-row head" role="row"><span>To beacon</span><span>Bearing</span><span>Distance (m)</span><span /></div>
+              {legs.map((l, i) => (
+                <div className="beacon-row" role="row" key={i}>
+                  <input aria-label={`Side ${i + 1} ends at beacon`} value={l.to}
+                    placeholder={i === legs.length - 1 ? (start.id || "Start") : `B${i + 2}`}
+                    onChange={(e) => setLegs(legs.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))} />
+                  <input aria-label={`Side ${i + 1} bearing`} value={l.bearing} placeholder="123°45'"
+                    onChange={(e) => setLegs(legs.map((x, j) => (j === i ? { ...x, bearing: e.target.value } : x)))} />
+                  <input aria-label={`Side ${i + 1} distance`} inputMode="decimal" value={l.distance}
+                    onChange={(e) => setLegs(legs.map((x, j) => (j === i ? { ...x, distance: e.target.value } : x)))} />
+                  <button type="button" className="remove" aria-label={`Remove side ${i + 1}`}
+                    onClick={() => setLegs(legs.length > 3 ? legs.filter((_, j) => j !== i) : legs)}>×</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn secondary" onClick={() => setLegs([...legs, { to: "", bearing: "", distance: "" }])}>Add a side</button>
+            <p className="hint">Bearings like 123°45&apos;, 123 45 or 123.75 all work.</p>
+          </>
+        )}
 
         <h2 style={{ marginTop: "2rem" }}>2. Details from the plan</h2>
         <div className="field">
@@ -133,16 +203,23 @@ export function PlotCheck() {
         <div className="field">
           <label htmlFor="area">Area shown on the plan (square metres, optional)</label>
           <input id="area" inputMode="decimal" value={statedArea} onChange={(e) => setStatedArea(e.target.value)} placeholder="648.21" />
-          <p className="hint">If the plan gives hectares, multiply by 10,000.</p>
+          <p className="hint">If the plan gives hectares, multiply by 10,000. Very old plans may use feet; this tool needs metres.</p>
         </div>
       </section>
 
       <section aria-live="polite">
         <h2>Result</h2>
         {!result ? (
-          <p className="muted">Enter at least 3 beacons to see the plot.</p>
+          <p className="muted">{mode === "all" ? "Enter at least 3 beacons to see the plot." : "Enter the starting beacon and at least 2 sides to see the plot."}</p>
         ) : (
           <>
+            {walked?.misclosure !== null && walked?.misclosure !== undefined && (
+              <p className={`notice ${walked.misclosure <= 0.1 ? "ok" : "error"}`}>
+                {walked.misclosure <= 0.1
+                  ? `The sides close back on the starting beacon (within ${(walked.misclosure * 100).toFixed(0)} cm). The figures are consistent.`
+                  : `The sides don't close: the walk ends ${walked.misclosure.toFixed(2)} m from the starting beacon. A bearing or distance was probably copied wrongly.`}
+              </p>
+            )}
             <div className="panel">
               <h3>Shape and size</h3>
               {svg && (
