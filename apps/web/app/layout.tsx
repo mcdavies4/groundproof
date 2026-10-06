@@ -46,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="site-foot">
           <div className="wrap legal-links">
             <span>Groundproof is built by The 36th Solutions Ltd. Not affiliated with NIPOST.</span>
+            <Link href="/tools/plot-check">Plot check</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/delete-account">Delete your account</Link>
