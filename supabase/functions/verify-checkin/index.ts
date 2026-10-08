@@ -13,6 +13,7 @@ import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { nipost, NipostError, type ReverseData } from "../_shared/nipost.ts";
 import { checkPhotos, headingDiff, type PhotoCheck } from "../_shared/photocheck.ts";
 import { distanceM } from "../_shared/geo.ts";
+import { alertOwner } from "../_shared/email.ts";
 
 const VERIFIED_DISTANCE_M = 25;
 const REVIEW_DISTANCE_M = 60;
@@ -28,7 +29,7 @@ type Verdict = "verified" | "review" | "flagged";
 type Unit = NonNullable<ReverseData["unit"]>;
 
 interface Property {
-  id: string; postcode: string | null; anchored_at: string | null; anchor_front_heading: number | null;
+  id: string; owner_id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_front_heading: number | null;
   anchor_mode: "postcode" | "coordinates" | null; anchor_lat: number | null; anchor_lng: number | null;
   nipost_suggested_postcode: string | null;
 }
@@ -46,7 +47,7 @@ Deno.serve(async (req) => {
   const db = adminClient();
   const { data: c, error } = await db
     .from("checkins")
-    .select("*, properties(id, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode)")
+    .select("*, properties(id, owner_id, label, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode)")
     .eq("id", checkin_id)
     .single();
   if (error || !c) return json({ error: "Check-in not found" }, 404);
@@ -59,6 +60,10 @@ Deno.serve(async (req) => {
   if ((c.is_emulator && !ALLOW_EMULATOR) || c.is_mocked) {
     const reason = c.is_emulator ? "Taken on an emulator, not a real phone." : "The phone reported a fake (mock) location.";
     await db.from("checkins").update({ verdict: "flagged", verdict_reason: reason }).eq("id", c.id);
+    await alertOwner(db, {
+      ownerId: property.owner_id, propertyId: property.id, propertyLabel: property.label, verdict: "flagged",
+      reason, note: null, isAnchor: c.is_anchor, matchType: property.anchor_mode ?? "postcode", stageName: null,
+    });
     return json({ verdict: "flagged", reason });
   }
 
@@ -229,6 +234,16 @@ Deno.serve(async (req) => {
     await db.from("milestones").update({ completed_checkin_id: c.id })
       .eq("id", c.milestone_id).is("completed_checkin_id", null);
   }
+
+  let stageName: string | null = null;
+  if (c.milestone_id) {
+    const { data: m } = await db.from("milestones").select("name").eq("id", c.milestone_id).maybeSingle();
+    stageName = m?.name ?? null;
+  }
+  await alertOwner(db, {
+    ownerId: property.owner_id, propertyId: property.id, propertyLabel: property.label,
+    verdict: verdict!, reason, note: photo.note, isAnchor: c.is_anchor, matchType: matchType!, stageName,
+  });
 
   return json({ verdict: verdict!, reason, note: photo.note, match_type: matchType!, mock: rev.mock });
 });
