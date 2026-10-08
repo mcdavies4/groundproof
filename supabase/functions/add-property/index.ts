@@ -10,6 +10,16 @@ Deno.serve(async (req) => {
   const user = await getCaller(req);
   if (!user) return json({ error: "Sign in to add a property" }, 401);
 
+  // Pilot limit: properties per owner (set PILOT_MAX_PROPERTIES; 0 or unset = no limit).
+  const maxProps = Number(Deno.env.get("PILOT_MAX_PROPERTIES") ?? "2");
+  if (maxProps > 0) {
+    const { count } = await adminClient().from("properties")
+      .select("id", { count: "exact", head: true }).eq("owner_id", user.id);
+    if ((count ?? 0) >= maxProps) {
+      return json({ error: `During the pilot each account can watch up to ${maxProps} properties. Email us if you need more.` }, 403);
+    }
+  }
+
   const { label, postcode, unknown } = await req.json().catch(() => ({}));
   if (!label || typeof label !== "string" || label.trim().length === 0) {
     return json({ error: "Give the property a name, for example \"Mum's house, Enugu\"" }, 400);

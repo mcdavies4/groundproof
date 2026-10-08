@@ -15,7 +15,7 @@ export default function Home() {
             before you send the next payment.
           </p>
           <WaitlistForm />
-          <p className="small muted">Your first check-in is free. No card needed.</p>
+          <p className="small muted">Pilot: 5 free check-ins per property. No card needed.</p>
         </div>
 
         <aside className="proof" aria-label="Example check-in log">
@@ -69,8 +69,8 @@ export default function Home() {
           <p className="muted">Per property. Your people on the ground never pay.</p>
 
           <div className="free-line">
-            <strong>Your first check-in is free.</strong>
-            <span>Add your property, do the anchor visit, and see a real verdict before you pay anything.</span>
+            <strong>Pilot: your first 5 check-ins are free.</strong>
+            <span>Add up to 2 properties, do the anchor visit, and see real verdicts for a month before you pay anything.</span>
           </div>
 
           <div className="plans">
