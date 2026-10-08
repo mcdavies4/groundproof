@@ -32,6 +32,9 @@ export function GetTheApp() {
             <StoreButton platform="Android" status={APP_LINKS.android.status} url={APP_LINKS.android.url} />
             <StoreButton platform="iPhone" status={APP_LINKS.ios.status} url={APP_LINKS.ios.url} />
           </div>
+          {anyLive && APP_LINKS.ios.status !== "live" && (
+            <p className="small muted">iPhone app coming later. For now, your person on the ground needs an Android phone.</p>
+          )}
           {!anyLive && (
             <p className="small muted">
               The Android app is with Google for review. Join the pilot list and we&apos;ll send your person on the
