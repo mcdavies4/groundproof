@@ -16,6 +16,7 @@ export interface Property {
   anchor_mode: "postcode" | "coordinates" | null;
   nipost_suggested_postcode: string | null;
   payment_currency: Currency;
+  share_token?: string | null;
   plan: "none" | "watch" | "build";
   plan_expires_at: string | null;
   check_credits: number;

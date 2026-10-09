@@ -3,7 +3,9 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, createInvite, setCurrency } from "./actions";
+import { addMilestone, createInvite, createShareLink, revokeShareLink, setCurrency } from "./actions";
+import Link from "next/link";
+import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
 
@@ -141,6 +143,30 @@ export default async function PropertyPage({
               <dt>Use</dt><dd>{property.nipost_building_use ?? "Not available"}</dd>
               <dt>Anchored</dt><dd>{property.anchored_at ? when(property.anchored_at) : "Not yet"}</dd>
             </dl>
+          </div>
+
+          <div className="panel">
+            <h3>Report</h3>
+            <p className="small muted">Every check-in, verdict and photo on one page. Download it as a PDF.</p>
+            <Link className="btn secondary" href={`/properties/${property.id}/report`}>Open report</Link>
+            {isOwner && (
+              <div style={{ marginTop: "1rem" }}>
+                {property.share_token ? (
+                  <>
+                    <p className="small" style={{ marginBottom: "0.4rem" }}>Anyone with this link can view the report, without signing in:</p>
+                    <ShareLink url={`${process.env.NEXT_PUBLIC_SITE_URL ?? "https://groundproof.site"}/r/${property.share_token}`} title={`${property.label}: Groundproof report`} />
+                    <form action={revokeShareLink.bind(null, property.id)}>
+                      <button type="submit" className="link-btn">Turn off this link</button>
+                    </form>
+                  </>
+                ) : (
+                  <form action={createShareLink.bind(null, property.id)}>
+                    <p className="small muted" style={{ marginBottom: "0.4rem" }}>Share it with family or co-investors. You can turn the link off any time.</p>
+                    <button type="submit" className="btn secondary">Create share link</button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
 
           {isOwner && <PlanPanel property={property} error={searchParams.payment === "error"} />}

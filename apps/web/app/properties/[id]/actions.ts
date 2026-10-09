@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { CURRENCIES, type Currency, type Product } from "@/lib/types";
@@ -48,5 +49,18 @@ export async function setCurrency(propertyId: string, form: FormData) {
   if (!(currency in CURRENCIES)) return;
   const supabase = createClient();
   await supabase.from("properties").update({ payment_currency: currency }).eq("id", propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function createShareLink(propertyId: string) {
+  const supabase = createClient();
+  const token = randomBytes(18).toString("base64url");
+  await supabase.from("properties").update({ share_token: token }).eq("id", propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function revokeShareLink(propertyId: string) {
+  const supabase = createClient();
+  await supabase.from("properties").update({ share_token: null }).eq("id", propertyId);
   revalidatePath(`/properties/${propertyId}`);
 }
