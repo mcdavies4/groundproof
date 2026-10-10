@@ -264,6 +264,37 @@ input:focus { border-color: var(--ink); }
   a { color: inherit; text-decoration: none; }
 }
 
+/* admin dashboard */
+.admin { width: min(1240px, 100% - 2.5rem); margin-inline: auto; }
+.admin-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.admin-head h1 { margin: 0; }
+.admin-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+.tile { background: var(--surface); border: 1px solid var(--concrete); border-radius: var(--radius); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.tile-label { font-size: 0.85rem; color: var(--ink-soft); font-weight: 600; }
+.tile-n { font-size: 2rem; font-stretch: 85%; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile-sub { font-size: 0.85rem; color: var(--ink-soft); }
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.5rem; }
+.admin .panel h2 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+.funnel { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.6rem; }
+.funnel li { display: grid; grid-template-columns: 13rem 1fr 5.5rem; gap: 0.75rem; align-items: center; font-size: 0.95rem; }
+.funnel-track { height: 14px; background: #e3e6e1; border-radius: 4px; overflow: hidden; }
+.funnel-bar { display: block; height: 100%; background: var(--ink); border-radius: 0 4px 4px 0; min-width: 2px; }
+.funnel-n { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.verdict-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: #e3e6e1; margin: 1rem 0; }
+.vb-verified { background: var(--verified); } .vb-review { background: var(--review); } .vb-flagged { background: var(--flagged); }
+.admin-table table { font-size: 0.92rem; }
+.admin-table td { vertical-align: top; }
+.scroll-x { overflow-x: auto; }
+.tag { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 3px; background: #e3e6e1; margin: 0 0.25rem 0.25rem 0; }
+.tag.bad { background: #f6d9d6; color: var(--flagged); }
+.tag.warn { background: #f3e6cf; color: var(--review); }
+@media (max-width: 900px) {
+  .admin-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-grid { grid-template-columns: 1fr; }
+  .funnel li { grid-template-columns: 1fr 4.5rem; }
+  .funnel-track { grid-column: 1 / -1; grid-row: 2; }
+}
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }
