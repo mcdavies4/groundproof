@@ -5,7 +5,7 @@ import type { Verdict } from "@/lib/types";
 export interface Stats {
   generatedAt: string;
   totals: {
-    waitlist: number; owners: number; reporters: number; properties: number; anchored: number;
+    waitlist: number; owners: number; reporters: number; viewers?: number; properties: number; anchored: number;
     checkins: number; checkins7d: number; paidCount: number; paidNgn: number; shareLinks: number;
   };
   funnel: { step: string; count: number }[];
@@ -43,7 +43,7 @@ export function AdminView({ s }: { s: Stats }) {
 
       <section className="admin-tiles" aria-label="Totals">
         <Tile n={t.properties} label="Properties" sub={`${t.anchored} anchored`} />
-        <Tile n={t.owners} label="Owners" sub={`${t.reporters} reporters`} />
+        <Tile n={t.owners} label="Owners" sub={`${t.reporters} reporters, ${t.viewers ?? 0} family viewers`} />
         <Tile n={t.checkins} label="Check-ins" sub={`${t.checkins7d} in the last 7 days`} />
         <Tile n={t.waitlist} label="Waitlist" sub={`${t.shareLinks} share links on`} />
         <Tile n={naira.format(t.paidNgn)} label="Paid" sub={`${t.paidCount} payment${t.paidCount === 1 ? "" : "s"}`} />

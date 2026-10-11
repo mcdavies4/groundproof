@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, createInvite, createShareLink, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, createInvite, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -17,7 +17,7 @@ export default async function PropertyPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { payment?: string };
+  searchParams: { payment?: string; viewer?: string };
 }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
@@ -26,13 +26,17 @@ export default async function PropertyPage({
   if (!property) notFound();
   const isOwner = (property as Property & { owner_id: string }).owner_id === user.id;
 
-  const [{ data: milestones }, { data: checkins }, { data: invites }] = await Promise.all([
+  const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }] = await Promise.all([
     supabase.from("milestones").select("*").eq("property_id", property.id).order("sort"),
     supabase.from("checkins").select("*").eq("property_id", property.id).order("server_time", { ascending: false }).limit(50),
     isOwner
       ? supabase.from("invites").select("code, used_at, expires_at").eq("property_id", property.id).order("created_at", { ascending: false }).limit(1)
       : Promise.resolve({ data: [] as { code: string; used_at: string | null; expires_at: string }[] }),
+    isOwner
+      ? supabase.from("viewer_invites").select("id, email, accepted_at").eq("property_id", property.id).order("created_at")
+      : Promise.resolve({ data: [] as { id: string; email: string; accepted_at: string | null }[] }),
   ]);
+  const viewerMsg = searchParams.viewer;
 
   // Signed URLs for photos (private bucket), one batch call
   const paths = (checkins ?? []).flatMap((c: Checkin) => c.photo_paths);
@@ -62,6 +66,15 @@ export default async function PropertyPage({
           )}
         </div>
       </div>
+
+      {!isOwner && (
+        <div className="notice viewer-notice">
+          <span>Shared with you. You can see every check-in and you&apos;ll get the email alerts. Only the owner can make changes.</span>
+          <form action={leaveProperty.bind(null, property.id)}>
+            <button type="submit" className="link-btn">Stop watching</button>
+          </form>
+        </div>
+      )}
 
       {property.anchor_mode === "coordinates" && property.nipost_suggested_postcode && (
         <p className="notice">
@@ -170,6 +183,40 @@ export default async function PropertyPage({
           </div>
 
           {isOwner && <PlanPanel property={property} error={searchParams.payment === "error"} />}
+
+          {isOwner && (
+            <div className="panel" id="people">
+              <h3>Family and co-investors</h3>
+              <p className="small muted">Add up to 5 people. They see every check-in and photo and get the same email alerts as you. They can&apos;t change anything.</p>
+              {(viewers ?? []).length > 0 && (
+                <ul className="viewers">
+                  {(viewers ?? []).map((v) => (
+                    <li key={v.id}>
+                      <span>
+                        {v.email}
+                        <span className="small muted">{v.accepted_at ? " · watching" : " · invited"}</span>
+                      </span>
+                      <form action={removeViewer.bind(null, property.id, v.id)}>
+                        <button type="submit" className="link-btn" aria-label={`Remove ${v.email}`}>Remove</button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {viewerMsg === "sent" && <p className="small" role="status">Invite sent. They&apos;ll see this property once they sign in with that email.</p>}
+              {viewerMsg === "saved" && <p className="small" role="status">Added. The email didn&apos;t go out, so tell them to sign in at groundproof.site with that address.</p>}
+              {viewerMsg?.startsWith("error:") && <p className="small" role="alert" style={{ color: "var(--flagged)" }}>{viewerMsg.slice(6)}</p>}
+              {(viewers ?? []).length < 5 && (
+                <form action={inviteViewer.bind(null, property.id)}>
+                  <div className="field">
+                    <label htmlFor="viewer-email">Email address</label>
+                    <input id="viewer-email" name="email" type="email" required maxLength={254} autoComplete="off" placeholder="sister@example.com" />
+                  </div>
+                  <button className="btn secondary" type="submit">Add person</button>
+                </form>
+              )}
+            </div>
+          )}
 
           {isOwner && (
             <div className="panel">

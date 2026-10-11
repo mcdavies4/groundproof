@@ -101,6 +101,15 @@ KYB document list; have these ready:
 - [ ] Request Lookup **L3** and reverse geocode (admin names need L2+)
 - [ ] Ask for the credit price per L2/L3 lookup and per reverse geocode
 
+## Plot check (beta)
+
+`/tools/plot-check` converts beacon coordinates from a Nigerian survey plan (Minna datum: West/Mid/East
+belts or UTM 31–33N; or WGS 84 UTM) to latitude/longitude, and shows the plot's area, side lengths and
+bearings. Conversion is in `apps/web/lib/survey.ts` (proj4). It uses EPSG "Minna to WGS 84 (3)" (~5 m)
+inside its south-central area and "(2)" (~15 m) elsewhere, and matches PROJ/EPSG output to the millimetre
+in tests at 10 locations. Belt choice can't be detected reliably (neighbouring belts land a few km apart),
+so users pick the system on the plan or compare candidates.
+
 ## Integrity checks
 
 `verify-checkin` runs four checks in order:

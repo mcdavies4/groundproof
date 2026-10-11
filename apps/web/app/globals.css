@@ -295,6 +295,13 @@ input:focus { border-color: var(--ink); }
   .funnel-track { grid-column: 1 / -1; grid-row: 2; }
 }
 
+/* ---------- family viewers ---------- */
+.viewers { list-style: none; padding: 0; margin: 0.75rem 0 1rem; }
+.viewers li { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--concrete); word-break: break-all; }
+.viewers form { margin: 0; flex-shrink: 0; }
+.viewer-notice { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.viewer-notice form { margin: 0; }
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }

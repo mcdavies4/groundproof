@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
       waitlist: W.length,
       owners: owners.size,
       reporters: reporters.size,
+      viewers: new Set(M.filter((m) => m.role === "viewer").map((m) => m.user_id)).size,
       properties: P.length,
       anchored: P.filter((p) => p.anchored_at).length,
       checkins: nonPending.length,

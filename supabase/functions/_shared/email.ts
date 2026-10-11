@@ -1,11 +1,11 @@
 /**
- * Owner alerts by email through Resend (https://resend.com/docs/api-reference/emails/send-email).
+ * Owner (and family viewer) alerts by email through Resend (https://resend.com/docs/api-reference/emails/send-email).
  * Needs RESEND_API_KEY and ALERT_FROM (e.g. "Groundproof <alerts@groundproof.site>") as Supabase secrets.
  * If either is missing, alerts are skipped and check-ins still work.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 type Verdict = "verified" | "review" | "flagged";
 
@@ -24,9 +24,13 @@ export async function alertOwner(db: SupabaseClient, args: {
   if (!key || !from) return;
 
   try {
-    const { data } = await db.auth.admin.getUserById(args.ownerId);
-    const to = data.user?.email;
-    if (!to) return;
+    // The owner plus any family viewers they've added.
+    const [{ data: owner }, { data: viewers }] = await Promise.all([
+      db.auth.admin.getUserById(args.ownerId),
+      db.from("viewer_invites").select("email").eq("property_id", args.propertyId).not("accepted_at", "is", null),
+    ]);
+    const recipients = [...new Set([owner.user?.email, ...(viewers ?? []).map((v) => v.email)].filter(Boolean) as string[])];
+    if (!recipients.length) return;
 
     const site = Deno.env.get("SITE_URL") ?? "https://groundproof.site";
     const link = `${site}/properties/${args.propertyId}`;
@@ -48,12 +52,15 @@ export async function alertOwner(db: SupabaseClient, args: {
   <p style="margin:0;font-size:13px;color:#3d5149">You're getting this because you watch ${esc(args.propertyLabel)} on Groundproof.</p>
 </div>`;
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-    });
-    if (!res.ok) console.error("alert email failed", res.status, await res.text());
+    // One email each, so nobody sees the others' addresses.
+    await Promise.all(recipients.map(async (to) => {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [to], subject, html }),
+      });
+      if (!res.ok) console.error("alert email failed", res.status, await res.text());
+    }));
   } catch (e) {
     console.error("alert email error", e);
   }

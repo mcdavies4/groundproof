@@ -64,3 +64,35 @@ export async function revokeShareLink(propertyId: string) {
   await supabase.from("properties").update({ share_token: null }).eq("id", propertyId);
   revalidatePath(`/properties/${propertyId}`);
 }
+
+export async function inviteViewer(propertyId: string, form: FormData) {
+  const email = String(form.get("email") ?? "").trim();
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("invite-viewer", {
+    body: { property_id: propertyId, email },
+  });
+  let msg = "sent";
+  if (error) {
+    // FunctionsHttpError carries the response; pull our friendly message out of it.
+    const ctx = (error as { context?: Response }).context;
+    const body = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    msg = "error:" + (body?.error ?? "Couldn't send the invite. Try again.");
+  } else if (data && data.emailed === false) {
+    msg = "saved";
+  }
+  revalidatePath(`/properties/${propertyId}`);
+  redirect(`/properties/${propertyId}?viewer=${encodeURIComponent(msg)}#people`);
+}
+
+export async function removeViewer(propertyId: string, inviteId: string) {
+  const supabase = createClient();
+  await supabase.rpc("remove_viewer", { p_invite: inviteId });
+  revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function leaveProperty(propertyId: string) {
+  const supabase = createClient();
+  await supabase.rpc("leave_property", { p_property: propertyId });
+  revalidatePath("/dashboard");
+  redirect("/dashboard");
+}

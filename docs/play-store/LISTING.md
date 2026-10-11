@@ -1,6 +1,6 @@
 # Google Play: what to paste where
 
-Site: https://groundproof-sigma.vercel.app (change if you add a custom domain)
+Site: https://groundproof.site
 
 ---
 
@@ -58,15 +58,15 @@ Take them on the emulator with the camera icon in its side toolbar.
 **Category**: House & Home
 **Tags**: Real estate, Productivity
 **Contact email**: your support email
-**Website**: https://groundproof-sigma.vercel.app
-**Privacy policy**: https://groundproof-sigma.vercel.app/privacy
+**Website**: https://groundproof.site
+**Privacy policy**: https://groundproof.site/privacy
 
 ---
 
 ## App content  (Policy → App content)
 
 **Privacy policy URL**
-`https://groundproof-sigma.vercel.app/privacy`
+`https://groundproof.site/privacy`
 
 **App access** → *All or some functionality is restricted*. Add instructions:
 ```
@@ -96,7 +96,7 @@ Before submitting, create a fresh invite code on a test property (codes are sing
 
 **Account deletion**
 - In-app: Yes, Your properties → Delete my account
-- Web link: `https://groundproof-sigma.vercel.app/delete-account`
+- Web link: `https://groundproof.site/delete-account`
 
 ---
 

@@ -9,13 +9,19 @@ export default async function Dashboard() {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
 
-  const { data: properties } = await supabase
-    .from("properties")
-    .select("*")
-    .eq("owner_id", user.id)
-    .order("created_at", { ascending: false });
+  // Pick up any family-viewer invites sent to this email.
+  await supabase.rpc("claim_viewer_invites");
 
-  const ids = (properties ?? []).map((p) => p.id);
+  const [{ data: properties }, { data: viewing }] = await Promise.all([
+    supabase.from("properties").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("property_members").select("property_id").eq("user_id", user.id).eq("role", "viewer"),
+  ]);
+  const sharedIds = (viewing ?? []).map((v) => v.property_id);
+  const { data: shared } = sharedIds.length
+    ? await supabase.from("properties").select("*").in("id", sharedIds).order("created_at", { ascending: false })
+    : { data: [] as Property[] };
+
+  const ids = [...(properties ?? []), ...(shared ?? [])].map((p) => p.id);
   const latest = new Map<string, { verdict: Verdict; server_time: string; match_type: "postcode" | "coordinates" | null }>();
   if (ids.length) {
     const { data: checkins } = await supabase
@@ -33,15 +39,35 @@ export default async function Dashboard() {
         <Link className="btn" href="/properties/new">Add a property</Link>
       </div>
 
-      {(properties ?? []).length === 0 ? (
+      {(properties ?? []).length === 0 && (shared ?? []).length > 0 ? (
+        <p className="muted">You don&apos;t have your own properties yet. <Link href="/properties/new">Add one</Link> any time.</p>
+      ) : (properties ?? []).length === 0 ? (
         <div className="empty">
           <h2>Add the first property you want watched</h2>
           <p>If you know its NIPOST postcode, have it ready. If not, your person on the ground finds it at their first visit.</p>
           <Link className="btn" href="/properties/new">Add a property</Link>
         </div>
       ) : (
+        <PropertyList items={properties as Property[]} latest={latest} />
+      )}
+
+      {(shared ?? []).length > 0 && (
+        <section style={{ marginTop: "2.5rem" }} aria-labelledby="shared">
+          <h2 id="shared">Shared with you</h2>
+          <p className="small muted">Someone added you to watch these. You see every check-in; only they can make changes.</p>
+          <PropertyList items={shared as Property[]} latest={latest} />
+        </section>
+      )}
+    </main>
+  );
+}
+
+type Latest = Map<string, { verdict: Verdict; server_time: string; match_type: "postcode" | "coordinates" | null }>;
+
+function PropertyList({ items, latest }: { items: Property[]; latest: Latest }) {
+  return (
         <ul className="list">
-          {(properties as Property[]).map((p) => {
+          {items.map((p) => {
             const last = latest.get(p.id);
             return (
               <li key={p.id}>
@@ -62,7 +88,5 @@ export default async function Dashboard() {
             );
           })}
         </ul>
-      )}
-    </main>
   );
 }
