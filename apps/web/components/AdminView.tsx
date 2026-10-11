@@ -23,6 +23,7 @@ export interface Stats {
   }[];
   payments: { time: string; property: string; who: string; product: string; amount: number; status: string }[];
   waitlist: { email: string; plan: string | null; created_at: string }[];
+  reporters?: { email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
   groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string }[];
   reporterApplications?: { id: string; name: string; email: string; phone: string; state: string; areas: string; occupation: string; android: boolean; notes: string | null; status: string; created_at: string }[];
 }
@@ -142,6 +143,30 @@ export function AdminView({ s }: { s: Stats }) {
           </table>
         </div>
         <p className="small muted">Links to a property only open for you if you&apos;re its owner or reporter.</p>
+      </section>
+
+      <section className="panel admin-table">
+        <h2>Reporters by record</h2>
+        <p className="small muted">Best first. Offer new owners to the top reporter in their area.</p>
+        <div className="scroll-x">
+          <table className="sides">
+            <thead><tr><th>Reporter</th><th>Covers</th><th>Visits</th><th>Verified</th><th>Flagged</th><th>Properties</th><th>Last visit</th></tr></thead>
+            <tbody>
+              {(s.reporters ?? []).map((r) => (
+                <tr key={r.email}>
+                  <td>{r.slug ? <a href={`/reporters/${r.slug}`}>{r.name}</a> : r.name ?? <span className="muted">no profile</span>}<div className="small"><a href={`mailto:${r.email}`}>{r.email}</a></div></td>
+                  <td>{r.where ?? <span className="muted">-</span>}</td>
+                  <td>{r.visits}</td>
+                  <td>{r.verified}{r.visits > 0 && <span className="small muted"> ({Math.round((r.verified / r.visits) * 100)}%)</span>}</td>
+                  <td style={r.flagged ? { color: "var(--flagged)", fontWeight: 700 } : undefined}>{r.flagged}</td>
+                  <td>{r.properties}</td>
+                  <td>{r.last ? day(r.last) : "-"}</td>
+                </tr>
+              ))}
+              {(s.reporters ?? []).length === 0 && <tr><td colSpan={7} className="muted">No reporters yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div className="admin-grid">

@@ -25,9 +25,10 @@ Deno.serve(async (req) => {
     db.from("payments").select("id, property_id, user_id, product, amount_ngn, status, created_at, paid_at").order("created_at", { ascending: false }).limit(500),
     db.from("waitlist").select("email, plan, created_at").order("created_at", { ascending: false }).limit(500),
   ]);
-  const [{ data: groundRequests }, { data: reporterApps }] = await Promise.all([
+  const [{ data: groundRequests }, { data: reporterApps }, { data: profiles }] = await Promise.all([
     db.from("ground_requests").select("id, name, email, phone, state, area, property_type, frequency, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
     db.from("reporter_applications").select("id, name, email, phone, state, areas, occupation, android, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
+    db.from("reporter_profiles").select("user_id, slug, display_name, state, areas, is_public"),
   ]);
 
   // Emails for owners and reporters
@@ -65,6 +66,21 @@ Deno.serve(async (req) => {
       paidNgn: paid.reduce((t, p) => t + p.amount_ngn, 0),
       shareLinks: P.filter((p) => p.share_token).length,
     },
+    // Reporters ranked by record: most verified visits, then fewest flags. Pending check-ins don't count.
+    reporters: [...reporters].map((uid) => {
+      const mine = nonPending.filter((c) => c.reporter_id === uid);
+      const prof = (profiles ?? []).find((p) => p.user_id === uid);
+      return {
+        email: emails.get(uid) ?? "(deleted)",
+        name: prof?.display_name ?? null, slug: prof?.is_public ? prof.slug : null,
+        where: prof ? `${prof.areas}, ${prof.state}` : null,
+        visits: mine.length,
+        verified: mine.filter((c) => c.verdict === "verified").length,
+        flagged: mine.filter((c) => c.verdict === "flagged").length,
+        properties: M.filter((m) => m.user_id === uid && m.role === "reporter").length,
+        last: mine[0]?.server_time ?? null,
+      };
+    }).sort((a, b) => b.verified - a.verified || a.flagged - b.flagged || b.visits - a.visits),
     groundRequests: groundRequests ?? [],
     reporterApplications: reporterApps ?? [],
     funnel: [

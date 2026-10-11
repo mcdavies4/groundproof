@@ -30,6 +30,14 @@ export default function BecomeAReporter() {
         <li>Happy to be on time and honest about what you see</li>
       </ul>
 
+      <h2>Build a record that wins you work</h2>
+      <p>
+        Every visit you make is checked against the building&apos;s NIPOST postcode, GPS and photos. Verified visits build a public
+        track record on your own Groundproof profile, like <em>38 visits, 36 verified, 0 flagged</em>. Owners can see it before they pick
+        someone, and new owners in your area are offered to the reporters with the best record first.{" "}
+        <Link href="/reporters">See the reporters list</Link>.
+      </p>
+
       <h2>Pay</h2>
       <p>
         You agree a fee per visit with each owner before you start, and they pay you directly. We&apos;re growing the network area by area,

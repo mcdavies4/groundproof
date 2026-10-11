@@ -7,7 +7,8 @@ export const metadata: Metadata = {
   description: "Building or buying in Nigeria from abroad, with no trusted relative nearby? We match you with a local person who visits with the Groundproof app, and every visit is still verified.",
 };
 
-export default function FindSomeone() {
+export default function FindSomeone({ searchParams }: { searchParams: { reporter?: string } }) {
+  const reporter = /^[a-z0-9-]{3,40}$/.test(searchParams.reporter ?? "") ? searchParams.reporter! : null;
   return (
     <main className="wrap page narrow">
       <h1>No one on the ground? We&apos;ll find someone.</h1>
@@ -36,10 +37,12 @@ export default function FindSomeone() {
       </p>
 
       <h2>Tell us about your property</h2>
-      <OwnerRequestForm />
+      {reporter && <p className="notice">We&apos;ll ask <Link href={`/reporters/${reporter}`}>this reporter</Link> first.</p>}
+      <OwnerRequestForm reporter={reporter} />
 
       <p className="small muted" style={{ marginTop: "2rem" }}>
-        Live in Nigeria and want to earn from visits? <Link href="/become-a-reporter">Apply to be a reporter</Link>.
+        Browse <Link href="/reporters">reporters and their records</Link>. Live in Nigeria and want to earn from visits?{" "}
+        <Link href="/become-a-reporter">Apply to be a reporter</Link>.
       </p>
     </main>
   );

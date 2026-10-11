@@ -40,12 +40,13 @@ function StateSelect() {
   );
 }
 
-export function OwnerRequestForm() {
+export function OwnerRequestForm({ reporter }: { reporter?: string | null }) {
   const [state, action] = useFormState<FormState, FormData>(submitLead, {});
   if (state.ok) return <Result state={state} />;
   return (
     <form action={action} className="lead-form">
       <input type="hidden" name="kind" value="owner" />
+      {reporter && <input type="hidden" name="preferred_reporter" value={reporter} />}
       <Honeypot />
       <div className="field"><label htmlFor="name">Your name</label><input id="name" name="name" type="text" required maxLength={100} autoComplete="name" /></div>
       <div className="field"><label htmlFor="email">Email</label><input id="email" name="email" type="email" required autoComplete="email" /></div>

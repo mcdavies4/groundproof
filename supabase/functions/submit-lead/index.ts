@@ -33,12 +33,14 @@ Deno.serve(async (req) => {
 
   if (b.kind === "owner") {
     const area = str(b.area, 120), propertyType = str(b.property_type, 20), frequency = str(b.frequency, 20);
+    const preferred = /^[a-z0-9-]{3,40}$/.test(str(b.preferred_reporter, 40)) ? str(b.preferred_reporter, 40) : null;
     if (!area) return json({ error: "Tell us the area or town." }, 400);
     if (!PROPERTY[propertyType] || !FREQ[frequency]) return json({ error: "Pick the property type and how often." }, 400);
-    const { error } = await db.from("ground_requests").insert({ name, email, phone, state, area, property_type: propertyType, frequency, notes });
+    const fullNotes = preferred ? `[Asked for reporter: ${preferred}] ${notes ?? ""}`.trim().slice(0, 1000) : notes;
+    const { error } = await db.from("ground_requests").insert({ name, email, phone, state, area, property_type: propertyType, frequency, notes: fullNotes });
     if (error) { console.error(error); return json({ error: "Couldn't save that. Try again in a minute." }, 500); }
     subject = `Find someone: ${area}, ${state}`;
-    summary = [["Name", name], ["Email", email], ["Phone", phone ?? "-"], ["Where", `${area}, ${state}`], ["Property", PROPERTY[propertyType]], ["Visits", FREQ[frequency]], ["Notes", notes ?? "-"]];
+    summary = [["Name", name], ["Email", email], ["Phone", phone ?? "-"], ["Where", `${area}, ${state}`], ["Property", PROPERTY[propertyType]], ["Visits", FREQ[frequency]], ...(preferred ? [["Asked for", `${Deno.env.get("SITE_URL") ?? "https://groundproof.site"}/reporters/${preferred}`] as [string, string]] : []), ["Notes", notes ?? "-"]];
     confirm = {
       subject: "We're finding someone for your property",
       text: `Thanks, ${name}. We've got your request for ${area}, ${state}. We'll email you within 3 working days with a person who can visit, what they charge, and next steps.`,

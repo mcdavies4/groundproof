@@ -2,15 +2,43 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { DeleteForm } from "./DeleteForm";
+import { ReporterProfileForm } from "@/components/ReporterProfileForm";
+import { ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
 
 export default async function Account() {
-  const { user } = await requireUser();
+  const { supabase, user } = await requireUser();
   if (!user) redirect("/login?next=/account");
+
+  // Reporters (anyone on the ground for at least one property) get a public profile.
+  const { count: reporting } = await supabase.from("property_members")
+    .select("property_id", { count: "exact", head: true }).eq("user_id", user.id).eq("role", "reporter");
+  const isReporter = (reporting ?? 0) > 0;
+  const [{ data: profile }, { data: record }] = isReporter
+    ? await Promise.all([
+        supabase.from("reporter_profiles").select("slug, display_name, state, areas, bio, is_public").eq("user_id", user.id).maybeSingle(),
+        supabase.rpc("my_reporter_record").single<ReporterStats>(),
+      ])
+    : [{ data: null }, { data: null }];
 
   return (
     <main className="wrap page" style={{ maxWidth: 560 }}>
       <h1>Your account</h1>
       <p>Signed in as <strong>{user.email}</strong>.</p>
+
+      {isReporter && (
+        <div className="panel" style={{ marginTop: "2rem" }}>
+          <h2>Your reporter profile</h2>
+          {record && <ReporterRecord r={record} />}
+          <p className="small muted" style={{ marginTop: "1rem" }}>
+            Owners looking for someone on the ground can see your profile and your record. The numbers come from your real check-ins:
+            every verified visit builds it, and flagged ones count against it.
+          </p>
+          {profile?.is_public && (
+            <p className="small">Your public page: <Link href={`/reporters/${profile.slug}`}>groundproof.site/reporters/{profile.slug}</Link></p>
+          )}
+          <ReporterProfileForm profile={profile} />
+        </div>
+      )}
 
       <div className="panel" style={{ marginTop: "2rem" }}>
         <h2>Delete your account</h2>
