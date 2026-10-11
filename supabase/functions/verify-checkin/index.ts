@@ -36,7 +36,7 @@ type Unit = NonNullable<ReverseData["unit"]>;
 interface Property {
   id: string; owner_id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_front_heading: number | null;
   anchor_mode: "postcode" | "coordinates" | null; anchor_lat: number | null; anchor_lng: number | null;
-  nipost_suggested_postcode: string | null;
+  nipost_suggested_postcode: string | null; require_video: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   const db = adminClient();
   const { data: c, error } = await db
     .from("checkins")
-    .select("*, properties(id, owner_id, label, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode)")
+    .select("*, properties(id, owner_id, label, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode, require_video)")
     .eq("id", checkin_id)
     .single();
   if (error || !c) return json({ error: "Check-in not found" }, 404);
@@ -210,6 +210,12 @@ Deno.serve(async (req) => {
       if (verdict! === "verified") verdict = "review";
       reasons.push(`Photos don't look like the anchored building${photo.reason ? `: ${photo.reason}` : "."}`);
     }
+  }
+
+  // ---- 5. Video, when the owner asked for one ----
+  if (!c.is_anchor && property.require_video && !c.video_path && verdict! !== "flagged") {
+    if (verdict! === "verified") verdict = "review";
+    reasons.push("No walk-round video, which the owner asked for.");
   }
 
   if (takenOffline) {

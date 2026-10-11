@@ -8,7 +8,10 @@ import { readCache, writeCache } from "@/lib/cache";
 import { discard, processQueue, retry, subscribe, type QueueItem } from "@/lib/queue";
 import { syncReminders, type OpenRequest } from "@/lib/reminders";
 
-type Row = { id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_mode: string | null };
+type Row = {
+  id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_mode: string | null;
+  kind?: "building" | "plot"; estates?: { name: string } | null;
+};
 type Saved = { rows: Row[]; requests: OpenRequest[]; at: string };
 
 const dueText = (d: string) =>
@@ -59,7 +62,7 @@ export default function Properties() {
     const { data: { session } } = await supabase.auth.getSession();
     const { data, error: listErr } = await supabase
       .from("property_members")
-      .select("properties(id, label, postcode, anchored_at, anchor_mode)")
+      .select("properties(id, label, postcode, anchored_at, anchor_mode, kind, estates(name))")
       .eq("user_id", session?.user.id ?? "")
       .eq("role", "reporter");
 
@@ -166,12 +169,13 @@ export default function Properties() {
         ListEmptyComponent={!loading ? <Text style={s.muted}>No properties yet. Ask the owner for an invite code.</Text> : null}
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => router.push(`/checkin/${item.id}`)}
+            onPress={() => router.push(item.kind === "plot" ? `/plot/${item.id}` : `/checkin/${item.id}`)}
             style={({ pressed }) => ({
               backgroundColor: pressed ? "#e9ece7" : c.white, borderWidth: 1, borderColor: c.concrete,
               borderRadius: 4, padding: 16, marginBottom: 12, gap: 10,
             })}
           >
+            {item.estates?.name ? <Text style={s.muted}>{item.estates.name}</Text> : null}
             <Text style={[s.body, { fontWeight: "700", fontSize: 18 }]}>{item.label}</Text>
             {requests.filter((r) => r.property_id === item.id).map((r) => (
               <View key={r.id} style={{ backgroundColor: "#fdf6dc", borderLeftWidth: 4, borderLeftColor: c.plate, padding: 10, gap: 2 }}>
@@ -179,13 +183,15 @@ export default function Properties() {
                 {r.note ? <Text style={s.muted}>{r.note}</Text> : null}
               </View>
             ))}
-            {item.postcode ? (
+            {item.kind === "plot" ? null : item.postcode ? (
               <Plate code={item.postcode} />
             ) : (
               <Text style={s.muted}>{item.anchor_mode === "coordinates" ? "Anchored by location" : "Postcode not set yet"}</Text>
             )}
             <Text style={s.muted}>
-              {item.anchored_at
+              {item.kind === "plot"
+                ? "Plot visit: walk to each survey beacon. Works with no signal."
+                : item.anchored_at
                 ? "Tap to check in"
                 : item.postcode
                   ? "Anchor visit needed. Do it at the house."

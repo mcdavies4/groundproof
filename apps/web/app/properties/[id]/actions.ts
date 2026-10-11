@@ -121,3 +121,9 @@ export async function cancelRequest(propertyId: string, requestId: string) {
   await supabase.rpc("cancel_checkin_request", { p_request: requestId });
   revalidatePath(`/properties/${propertyId}`);
 }
+
+export async function setRequireVideo(propertyId: string, on: boolean) {
+  const supabase = createClient();
+  await supabase.from("properties").update({ require_video: on }).eq("id", propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+}

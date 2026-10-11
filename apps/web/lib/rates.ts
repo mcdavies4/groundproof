@@ -13,5 +13,6 @@ export const REPORTER_RULES = [
   "No extra charges (transport, data, \"logistics\") unless the owner agrees in writing first.",
   "Do every visit in the Groundproof app, at the property. Never send old photos or fake a visit.",
   "Turn up when you said you would, or tell the owner in good time.",
+  "For 12 months after Groundproof introduces you to an owner, do all your visits for them through Groundproof, not around it.",
   "Breaking these rules gets you removed from Groundproof.",
 ];

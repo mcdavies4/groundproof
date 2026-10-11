@@ -11,7 +11,7 @@ import { cors, json } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
 
-type Row = { id: string; owner_id: string; label: string; anchored_at: string };
+type Row = { id: string; owner_id: string; label: string; anchored_at: string; estate_id: string | null };
 type C = { id: string; verdict: string; is_anchor: boolean; milestone_id: string | null; photo_paths: string[]; server_time: string; taken_offline: boolean };
 
 Deno.serve(async (req) => {
@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
   const monthName = new Date(start).toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" });
 
   const db = adminClient();
-  let q = db.from("properties").select("id, owner_id, label, anchored_at").not("anchored_at", "is", null).lt("anchored_at", end);
+  let q = db.from("properties").select("id, owner_id, label, anchored_at, estate_id").not("anchored_at", "is", null).lt("anchored_at", end);
   if (body.property_id) q = q.eq("id", body.property_id);
   const { data: props, error } = await q;
   if (error) return json({ error: error.message }, 500);
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       .in("user_id", [p.owner_id, ...(viewers ?? []).map((v) => v.user_id).filter(Boolean)]);
     const offIds = new Set((off ?? []).map((o) => o.user_id));
     const recipients = [...new Set([
-      offIds.has(p.owner_id) ? null : owner.user?.email,
+      offIds.has(p.owner_id) || p.estate_id ? null : owner.user?.email,   // developers see estates on the website instead
       ...(viewers ?? []).filter((v) => !offIds.has(v.user_id)).map((v) => v.email),
     ].filter(Boolean) as string[])];
 

@@ -20,6 +20,10 @@ export interface Property {
   plan: "none" | "watch" | "build";
   plan_expires_at: string | null;
   check_credits: number;
+  require_video?: boolean;
+  estate_id?: string | null;
+  kind?: "building" | "plot";
+  beacons?: { label: string; lat: number; lng: number }[] | null;
 }
 
 export interface Milestone {
@@ -40,6 +44,7 @@ export interface Checkin {
   server_time: string;
   device_time: string;
   taken_offline: boolean;
+  video_path: string | null;
   photo_paths: string[];
   note: string | null;
   verdict: Verdict;

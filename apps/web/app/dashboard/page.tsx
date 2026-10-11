@@ -13,10 +13,11 @@ export default async function Dashboard() {
   await supabase.rpc("claim_viewer_invites");
 
   const [{ data: properties }, { data: viewing }] = await Promise.all([
-    supabase.from("properties").select("*").eq("owner_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("properties").select("*").eq("owner_id", user.id).is("estate_id", null).order("created_at", { ascending: false }),
     supabase.from("property_members").select("property_id").eq("user_id", user.id).eq("role", "viewer"),
   ]);
   const sharedIds = (viewing ?? []).map((v) => v.property_id);
+  const { data: dev } = await supabase.from("developers").select("approved").eq("user_id", user.id).maybeSingle();
   const { data: shared } = sharedIds.length
     ? await supabase.from("properties").select("*").in("id", sharedIds).order("created_at", { ascending: false })
     : { data: [] as Property[] };
@@ -36,7 +37,11 @@ export default async function Dashboard() {
     <main className="wrap page">
       <div className="page-head">
         <h1 style={{ margin: 0 }}>Your properties</h1>
-        <Link className="btn" href="/properties/new">Add a property</Link>
+        {dev?.approved && <Link className="btn secondary" href="/estates">Your estates</Link>}
+        <div className="row-links">
+          <Link className="btn secondary" href="/plots/new">Check a plot</Link>
+          <Link className="btn" href="/properties/new">Add a property</Link>
+        </div>
       </div>
 
       {(properties ?? []).length === 0 && (shared ?? []).length > 0 ? (
@@ -75,12 +80,13 @@ function PropertyList({ items, latest }: { items: Property[]; latest: Latest }) 
                   <div>
                     <strong>{p.label}</strong>
                     <div className="small muted">
-                      {p.anchored_at ? "Anchored" : "Waiting for the anchor visit"}
+                      {p.kind === "plot" ? "Walk every beacon before you buy" : p.anchored_at ? "Anchored" : "Waiting for the anchor visit"}
                       {last && `, last check-in ${new Date(last.server_time).toLocaleDateString("en-GB")}`}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    {p.postcode ? <PostcodePlate code={p.postcode} size="sm" /> : <span className="small muted">{p.anchor_mode === "coordinates" ? "Anchored by location" : "Postcode found on first visit"}</span>}
+                    {p.kind === "plot" ? <span className="small muted">Plot to check · {(p.beacons ?? []).length} beacons</span>
+                      : p.postcode ? <PostcodePlate code={p.postcode} size="sm" /> : <span className="small muted">{p.anchor_mode === "coordinates" ? "Anchored by location" : "Postcode found on first visit"}</span>}
                     {last && <div style={{ marginTop: "0.4rem" }}><VerdictBadge verdict={last.verdict} matchType={last.match_type} /></div>}
                   </div>
                 </Link>

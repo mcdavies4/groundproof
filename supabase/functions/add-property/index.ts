@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   const maxProps = Number(Deno.env.get("PILOT_MAX_PROPERTIES") ?? "2");
   if (maxProps > 0) {
     const { count } = await adminClient().from("properties")
-      .select("id", { count: "exact", head: true }).eq("owner_id", user.id);
+      .select("id", { count: "exact", head: true }).eq("owner_id", user.id).is("estate_id", null);
     if ((count ?? 0) >= maxProps) {
       return json({ error: `During the pilot each account can watch up to ${maxProps} properties. Email us if you need more.` }, 403);
     }

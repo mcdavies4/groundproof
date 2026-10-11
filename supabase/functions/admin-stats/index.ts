@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
 <li>The price above is the full price. No extra charges (transport, data, "logistics") unless the owner agrees in writing first.</li>
 <li>Every visit is done in the Groundproof app at the property, so it can be verified.</li>
 <li>During the pilot, Groundproof's checks are free on these visits. The owner pays the reporter only.</li>
+<li>For 12 months from this introduction, all visits between you are arranged and done through Groundproof, not around it. That keeps every visit verified, and keeps the reporter's record growing.</li>
 <li>Any problem, just reply to this email.</li></ul>`;
     const mail = (to: string, intro: string) => key && from ? fetch("https://api.resend.com/emails", {
       method: "POST",

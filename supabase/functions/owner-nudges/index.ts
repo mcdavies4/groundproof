@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
   const now = Date.now();
   const since = new Date(now - WINDOW - 7 * DAY).toISOString();
 
-  const { data: props } = await db.from("properties").select("id, owner_id, label, created_at, anchored_at").gte("created_at", since);
+  const { data: props } = await db.from("properties").select("id, owner_id, label, created_at, anchored_at").gte("created_at", since).is("estate_id", null).eq("kind", "building");  // not estate units or plots
   const P = props ?? [];
   if (!P.length) return json({ sent: [], checked: 0 });
   const ids = P.map((p) => p.id);

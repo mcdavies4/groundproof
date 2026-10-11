@@ -14,18 +14,21 @@ import { supabase } from "./supabase";
 const KEY = "gp.queue.v1";
 
 export type QueueItem = {
-  id: string;                         // the check-in id
+  kind?: "checkin" | "plot";          // missing = checkin (items saved by app 1.1)
+  id: string;                         // the check-in or plot-visit id
   propertyId: string;
   propertyLabel: string;
   takenAt: string;                    // when the photos were taken
   photos: string[];                   // file URIs inside the app's document folder
-  row: Record<string, unknown>;       // the checkins insert, minus photo_paths and uploaded_device_time
+  video?: string | null;              // optional 15-second walk-round clip, same folder
+  row: Record<string, unknown>;       // the checkins / plot_visits insert, minus upload-time fields
+  beacons?: Record<string, unknown>[]; // plot visits: one beacon_checks row per beacon (photos[i] = "" if none)
   stage: "upload" | "verify";
   failed: string | null;              // set when the server refused it; the user can retry or discard
 };
 
 export type VerifyResult = {
-  verdict: "verified" | "review" | "flagged" | "pending";
+  verdict: "verified" | "review" | "flagged" | "pending" | "match" | "partial" | "mismatch";
   reason: string;
   note?: string | null;
   match_type?: "postcode" | "coordinates";
@@ -77,11 +80,22 @@ export function stashPhotos(id: string, uris: string[]): string[] {
   const dir = folder(id);
   dir.create({ intermediates: true, idempotent: true });
   return uris.map((uri, i) => {
+    if (!uri) return "";
     const dest = new File(dir, `${i + 1}.jpg`);
     if (dest.exists) dest.delete();
     new File(uri).copySync(dest);
     return dest.uri;
   });
+}
+
+/** Copy the walk-round video next to the photos. */
+export function stashVideo(id: string, uri: string): string {
+  const dir = folder(id);
+  dir.create({ intermediates: true, idempotent: true });
+  const dest = new File(dir, "walk.mp4");
+  if (dest.exists) dest.delete();
+  new File(uri).copySync(dest);
+  return dest.uri;
 }
 
 export async function enqueue(item: QueueItem) {
@@ -99,7 +113,68 @@ export async function discard(id: string) {
 const NETWORK = /network|fetch|timed? ?out|timeout|abort|connection|offline|unreachable|socket|jwt|token|401/i;
 const clean = (m: string) => m.replace(/^[A-Z_]+:\s*/, "");
 
+/** Upload one file. Returns null when it's there (now or from an earlier try). */
+async function put(bucket: string, path: string, uri: string, type: string, what: string): Promise<Outcome | null> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await new File(uri).arrayBuffer();
+  } catch {
+    return { kind: "failed", error: `The ${what} for this visit is missing from the phone. Discard it and do the visit again.` };
+  }
+  const { error } = await supabase.storage.from(bucket).upload(path, bytes, { contentType: type });
+  if (!error) return null;
+  const status = String((error as { statusCode?: string | number }).statusCode ?? "");
+  if (status === "409" || /exists|duplicate/i.test(error.message)) return null;
+  if (NETWORK.test(error.message) || status === "" || status.startsWith("5")) return { kind: "waiting" };
+  return { kind: "failed", error: `Upload failed: ${error.message}` };
+}
+
+async function verify(fn: string, body: Record<string, string>, id: string): Promise<Outcome> {
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  if (error) {
+    if (error instanceof FunctionsFetchError) return { kind: "uploaded" };
+    if (error instanceof FunctionsHttpError) {
+      const status = (error.context as Response | undefined)?.status ?? 0;
+      if (status === 401 || status >= 500) return { kind: "uploaded" };
+      const res = await (error.context as Response).json().catch(() => null);
+      return { kind: "failed", error: res?.error ?? "The server couldn't check this one." };
+    }
+    return { kind: "uploaded" };
+  }
+  await discard(id);
+  return { kind: "done", result: data as VerifyResult };
+}
+
+async function sendPlot(item: QueueItem): Promise<Outcome> {
+  if (item.stage === "upload") {
+    const beacons = item.beacons ?? [];
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < beacons.length; i++) {
+      let photoPath: string | null = null;
+      if (item.photos[i]) {
+        photoPath = `${item.propertyId}/${item.id}/${i + 1}.jpg`;
+        const bad = await put("plot-photos", photoPath, item.photos[i], "image/jpeg", "beacon photos");
+        if (bad) return bad;
+      }
+      rows.push({ ...beacons[i], photo_path: photoPath });
+    }
+    const { error: vErr } = await supabase.from("plot_visits").insert({ ...item.row, uploaded_device_time: new Date().toISOString() });
+    if (vErr && vErr.code !== "23505") {
+      if (NETWORK.test(vErr.message) || !vErr.code) return { kind: "waiting" };
+      return { kind: "failed", error: clean(vErr.message) };
+    }
+    const { error: bErr } = await supabase.from("beacon_checks").insert(rows);
+    if (bErr && bErr.code !== "23505") {
+      if (NETWORK.test(bErr.message) || !bErr.code) return { kind: "waiting" };
+      return { kind: "failed", error: clean(bErr.message) };
+    }
+    await update(item.id, { stage: "verify", failed: null });
+  }
+  return verify("verify-plot-visit", { visit_id: item.id }, item.id);
+}
+
 async function send(item: QueueItem): Promise<Outcome> {
+  if (item.kind === "plot") return sendPlot(item);
   if (item.stage === "upload") {
     const paths: string[] = [];
     for (let i = 0; i < item.photos.length; i++) {
@@ -122,8 +197,30 @@ async function send(item: QueueItem): Promise<Outcome> {
       paths.push(path);
     }
 
+    let videoPath: string | null = null;
+    if (item.video) {
+      const path = `${item.propertyId}/${item.id}/walk.mp4`;
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await new File(item.video).arrayBuffer();
+      } catch {
+        return { kind: "failed", error: "The video for this check-in is missing from the phone. Discard it and check in again." };
+      }
+      const { error } = await supabase.storage.from("checkin-videos").upload(path, bytes, { contentType: "video/mp4" });
+      if (error) {
+        const status = String((error as { statusCode?: string | number }).statusCode ?? "");
+        const already = status === "409" || /exists|duplicate/i.test(error.message);
+        if (!already) {
+          if (NETWORK.test(error.message) || status === "" || status.startsWith("5")) return { kind: "waiting" };
+          return { kind: "failed", error: `Video upload failed: ${error.message}` };
+        }
+      }
+      videoPath = path;
+    }
+
     const { error } = await supabase.from("checkins").insert({
       ...item.row,
+      video_path: videoPath,
       photo_paths: paths,
       uploaded_device_time: new Date().toISOString(),
     });
@@ -134,19 +231,8 @@ async function send(item: QueueItem): Promise<Outcome> {
     await update(item.id, { stage: "verify", failed: null });
   }
 
-  const { data, error } = await supabase.functions.invoke("verify-checkin", { body: { checkin_id: item.id } });
-  if (error) {
-    if (error instanceof FunctionsFetchError) return { kind: "uploaded" };
-    if (error instanceof FunctionsHttpError) {
-      const status = (error.context as Response | undefined)?.status ?? 0;
-      if (status === 401 || status >= 500) return { kind: "uploaded" };   // expired sign-in or NIPOST down: retry later
-      const body = await (error.context as Response).json().catch(() => null);
-      return { kind: "failed", error: body?.error ?? "The server couldn't check this one." };
-    }
-    return { kind: "uploaded" };
-  }
-  await discard(item.id);
-  return { kind: "done", result: data as VerifyResult };
+  // 401 (expired sign-in) or 5xx (NIPOST down): retried later.
+  return verify("verify-checkin", { checkin_id: item.id }, item.id);
 }
 
 let running: Promise<void> | null = null;

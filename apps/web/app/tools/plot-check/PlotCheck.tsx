@@ -265,6 +265,12 @@ export function PlotCheck() {
                   <a className="btn" href={geojsonLink(result.located.pts)} target="_blank" rel="noreferrer">See the plot outline on a map</a>
                   <a className="btn secondary" href={mapsLink(result.located.centre.lat, result.located.centre.lng)} target="_blank" rel="noreferrer">Open in Google Maps</a>
                 </p>
+                <p className="notice">
+                  Buying this plot? Have someone walk to every beacon and check it matches the plan.{" "}
+                  <a href={`/plots/new?b=${encodeURIComponent(JSON.stringify(result.located.pts.map((p) => ({ label: p.id, lat: Number(p.lat.toFixed(7)), lng: Number(p.lng.toFixed(7)) }))))}&acc=${result.located.accuracyM}`}>
+                    Book a plot visit with these beacons
+                  </a>
+                </p>
                 <table className="sides">
                   <thead><tr><th>Beacon</th><th>Latitude, longitude</th></tr></thead>
                   <tbody>

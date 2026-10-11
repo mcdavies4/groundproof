@@ -31,6 +31,7 @@ export default function Layout() {
         <Stack.Screen name="index" options={{ title: "Groundproof" }} />
         <Stack.Screen name="properties" options={{ title: "Your properties", headerBackVisible: false }} />
         <Stack.Screen name="checkin/[id]" options={{ title: "Check in" }} />
+        <Stack.Screen name="plot/[id]" options={{ title: "Plot visit" }} />
       </Stack>
     </>
   );

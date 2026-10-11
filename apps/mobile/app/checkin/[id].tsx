@@ -10,12 +10,13 @@ import { supabase } from "@/lib/supabase";
 import { c, s } from "@/lib/theme";
 import { Button, Plate, verdictColour, verdictLabel } from "@/lib/ui";
 import { readCache, writeCache } from "@/lib/cache";
-import { enqueue, sendNow, stashPhotos, discard } from "@/lib/queue";
+import { enqueue, sendNow, stashPhotos, stashVideo, discard } from "@/lib/queue";
 
 const MAX_PHOTOS = 4;
 const ANCHOR_PHOTOS = 4;
 
-type Property = { id: string; label: string; postcode: string | null; anchored_at: string | null };
+type Property = { id: string; label: string; postcode: string | null; anchored_at: string | null; require_video?: boolean };
+const VIDEO_SECONDS = 15;
 type Milestone = { id: string; name: string; completed_checkin_id: string | null };
 type Shot = { uri: string; lat: number; lng: number; accuracy: number; mocked: boolean; time: string; heading: number | null };
 
@@ -70,18 +71,44 @@ export default function CheckIn() {
   const [find, setFind] = useState<Find>({ status: "idle" });
   const [anchorChoice, setAnchorChoice] = useState<"postcode" | "coordinates" | null>(null);
   const [claimedPostcode, setClaimedPostcode] = useState<string | null>(null);
+  const [video, setVideo] = useState<string | null>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [camMode, setCamMode] = useState<"picture" | "video">("picture");
+  const [recording, setRecording] = useState(false);
+  const [secs, setSecs] = useState(0);
   const cam = useRef<CameraView>(null);
 
   const isAnchor = property !== null && !property.anchored_at;
   const needsFind = isAnchor && !property?.postcode && anchorChoice === null;
   const needed = isAnchor ? ANCHOR_PHOTOS : 1;
+  const videoRequired = !isAnchor && Boolean(property?.require_video);
+  const showCam = !videoOpen ? shots.length < MAX_PHOTOS : !video;
+
+  async function recordVideo() {
+    if (!cam.current) return;
+    setError(null);
+    setCamMode("video");
+    await new Promise((r) => setTimeout(r, 600));          // let the camera switch to video
+    setRecording(true); setSecs(0);
+    const tick = setInterval(() => setSecs((x) => x + 1), 1000);
+    try {
+      const r = await cam.current.recordAsync({ maxDuration: VIDEO_SECONDS });
+      if (r?.uri) { setVideo(r.uri); setVideoOpen(false); }
+    } catch (e) {
+      setError(`Couldn't record the video: ${(e as Error).message}`);
+    } finally {
+      clearInterval(tick);
+      setRecording(false);
+      setCamMode("picture");
+    }
+  }
 
   useEffect(() => {
     let watcher: Location.LocationSubscription | null = null;
     let cancelled = false;
     (async () => {
       const [{ data: p, error: pErr }, { data: m }] = await Promise.all([
-        supabase.from("properties").select("id, label, postcode, anchored_at").eq("id", id).single(),
+        supabase.from("properties").select("id, label, postcode, anchored_at, require_video").eq("id", id).single(),
         supabase.from("milestones").select("id, name, completed_checkin_id").eq("property_id", id).order("sort"),
       ]);
       if (pErr || !p) {
@@ -182,12 +209,14 @@ export default function CheckIn() {
 
       // Save everything on the phone first, so nothing is lost if there's no signal.
       const photos = stashPhotos(checkinId, shots.map((x) => x.uri));
+      const videoFile = video ? stashVideo(checkinId, video) : null;
       await enqueue({
         id: checkinId,
         propertyId: property.id,
         propertyLabel: property.label,
         takenAt: shots[0].time,
         photos,
+        video: videoFile,
         stage: "upload",
         failed: null,
         row: {
@@ -373,18 +402,52 @@ export default function CheckIn() {
         </View>
       ) : null}
 
-      {shots.length < MAX_PHOTOS && (
+      {showCam && (
         <View style={{ borderRadius: 4, overflow: "hidden", aspectRatio: 3 / 4, backgroundColor: "#000" }}>
-          <CameraView ref={cam} style={{ flex: 1 }} facing="back" />
+          <CameraView
+            ref={cam} style={{ flex: 1 }} facing="back"
+            mode={camMode} mute videoQuality="480p" videoBitrate={1_500_000}
+          />
+          {recording && (
+            <View style={{ position: "absolute", top: 12, left: 12, backgroundColor: c.flagged, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 }}>
+              <Text style={{ color: "#fff", fontWeight: "800" }}>● REC {VIDEO_SECONDS - secs}s</Text>
+            </View>
+          )}
         </View>
       )}
-      {shots.length < MAX_PHOTOS && (
+      {!videoOpen && shots.length < MAX_PHOTOS && (
         <Text style={[s.body, { fontWeight: "700" }]}>
           Photo {shots.length + 1}: {(isAnchor ? ANCHOR_SHOTS : CHECKIN_SHOTS)[shots.length]}
         </Text>
       )}
-      {shots.length < MAX_PHOTOS && (
+      {!videoOpen && shots.length < MAX_PHOTOS && (
         <Button title={`Take photo ${shots.length + 1}${isAnchor ? ` of ${ANCHOR_PHOTOS}` : ""}`} onPress={takePhoto} busy={capturing} />
+      )}
+
+      {!isAnchor && shots.length >= needed && (
+        <View style={{ gap: 10, padding: 14, backgroundColor: c.white, borderWidth: 1, borderColor: c.concrete, borderRadius: 4 }}>
+          <Text style={[s.body, { fontWeight: "700" }]}>
+            Walk-round video {videoRequired ? "(the owner asked for one)" : "(optional)"}
+          </Text>
+          {video ? (
+            <>
+              <Text style={s.muted}>Video recorded. It uploads with the photos.</Text>
+              <Button title="Record again" secondary onPress={() => { setVideo(null); setVideoOpen(true); }} />
+            </>
+          ) : !videoOpen ? (
+            <>
+              <Text style={s.muted}>{VIDEO_SECONDS} seconds, slowly walking along the front of the building. No sound is recorded.</Text>
+              <Button title="Record a video" secondary onPress={() => setVideoOpen(true)} />
+            </>
+          ) : recording ? (
+            <Button title="Stop" onPress={() => cam.current?.stopRecording()} />
+          ) : (
+            <>
+              <Button title={`Start ${VIDEO_SECONDS}-second video`} onPress={recordVideo} />
+              <Button title="Back to photos" secondary onPress={() => setVideoOpen(false)} />
+            </>
+          )}
+        </View>
       )}
 
       {shots.length > 0 && (
@@ -411,7 +474,7 @@ export default function CheckIn() {
         title={isAnchor ? "Submit anchor visit" : "Submit check-in"}
         onPress={submit}
         busy={submitting}
-        disabled={shots.length < needed}
+        disabled={shots.length < needed || recording || (videoRequired && !video)}
       />
       {error && <Text style={s.error}>{error}</Text>}
     </ScrollView>

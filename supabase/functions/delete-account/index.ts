@@ -11,14 +11,16 @@ Deno.serve(async (req) => {
 
   const db = adminClient();
 
-  // Photos for properties this user owns (storage isn't removed by database cascades).
+  // Photos, videos and beacon photos for properties this user owns (storage isn't removed by database cascades).
   const { data: owned } = await db.from("properties").select("id").eq("owner_id", user.id);
   for (const p of owned ?? []) {
-    const { data: folders } = await db.storage.from("checkins").list(p.id, { limit: 1000 });
-    for (const f of folders ?? []) {
-      const { data: files } = await db.storage.from("checkins").list(`${p.id}/${f.name}`, { limit: 100 });
-      const paths = (files ?? []).map((x) => `${p.id}/${f.name}/${x.name}`);
-      if (paths.length) await db.storage.from("checkins").remove(paths);
+    for (const bucket of ["checkins", "checkin-videos", "plot-photos"]) {
+      const { data: folders } = await db.storage.from(bucket).list(p.id, { limit: 1000 });
+      for (const f of folders ?? []) {
+        const { data: files } = await db.storage.from(bucket).list(`${p.id}/${f.name}`, { limit: 100 });
+        const paths = (files ?? []).map((x) => `${p.id}/${f.name}/${x.name}`);
+        if (paths.length) await db.storage.from(bucket).remove(paths);
+      }
     }
   }
 

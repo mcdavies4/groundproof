@@ -26,11 +26,14 @@ export async function alertOwner(db: SupabaseClient, args: {
 
   try {
     // The owner plus any family viewers they've added.
-    const [{ data: owner }, { data: viewers }] = await Promise.all([
+    const [{ data: owner }, { data: viewers }, { data: prop }] = await Promise.all([
       db.auth.admin.getUserById(args.ownerId),
       db.from("viewer_invites").select("email").eq("property_id", args.propertyId).not("accepted_at", "is", null),
+      db.from("properties").select("estate_id").eq("id", args.propertyId).maybeSingle(),
     ]);
-    const recipients = [...new Set([owner.user?.email, ...(viewers ?? []).map((v) => v.email)].filter(Boolean) as string[])];
+    // Developers with many units only hear about visits that need a look; buyers hear about everything.
+    const ownerGetsIt = !prop?.estate_id || args.verdict !== "verified";
+    const recipients = [...new Set([ownerGetsIt ? owner.user?.email : null, ...(viewers ?? []).map((v) => v.email)].filter(Boolean) as string[])];
     if (!recipients.length) return;
 
     const site = Deno.env.get("SITE_URL") ?? "https://groundproof.site";
@@ -65,5 +68,36 @@ export async function alertOwner(db: SupabaseClient, args: {
     }));
   } catch (e) {
     console.error("alert email error", e);
+  }
+}
+
+/** "You've been added to <property>" email for a family viewer or buyer. */
+export async function sendViewerInvite(to: string, inviter: string, label: string): Promise<boolean> {
+  const key = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("ALERT_FROM");
+  if (!key || !from) return false;
+
+  const site = Deno.env.get("SITE_URL") ?? "https://groundproof.site";
+  const link = `${site}/login?next=/dashboard`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#10251f;max-width:520px;margin:0 auto;padding:24px">
+  <p style="margin:0 0 6px;font-size:14px;color:#3d5149">Groundproof</p>
+  <h1 style="margin:0 0 14px;font-size:24px">You've been added to ${esc(label)}</h1>
+  <p style="margin:0 0 14px;font-size:16px;line-height:1.5">${esc(inviter)} is using Groundproof to keep an eye on this property in Nigeria. Every visit from their person on the ground is checked against the building's NIPOST postcode, with photos.</p>
+  <p style="margin:0 0 14px;font-size:16px;line-height:1.5">You can now see every check-in and its photos, and you'll get an email after each one. You can't change anything.</p>
+  <p style="margin:0 0 24px"><a href="${link}" style="background:#10251f;color:#fff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:4px;display:inline-block">Open Groundproof</a></p>
+  <p style="margin:0;font-size:13px;color:#3d5149">Sign in with this email address (${esc(to)}). No password needed: we send you a code.</p>
+</div>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject: `You've been added to ${label} on Groundproof`, html }),
+    });
+    if (!res.ok) { console.error("invite email failed", res.status, await res.text()); return false; }
+    return true;
+  } catch (e) {
+    console.error("invite email error", e);
+    return false;
   }
 }
