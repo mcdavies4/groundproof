@@ -52,3 +52,16 @@ export async function saveReporterProfile(_prev: FormState, form: FormData): Pro
   }
   return { error: "Couldn't create your profile. Try again." };
 }
+
+export async function saveEmailPrefs(_prev: FormState, form: FormData): Promise<FormState> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in again." };
+  const { error } = await supabase.from("email_prefs").upsert({
+    user_id: user.id,
+    tips: form.get("tips") === "on",
+    digest: form.get("digest") === "on",
+    updated_at: new Date().toISOString(),
+  });
+  return error ? { error: "Couldn't save. Try again." } : { ok: "Saved." };
+}

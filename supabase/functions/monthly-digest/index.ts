@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       db.from("checkins").select("id, verdict, is_anchor, milestone_id, photo_paths, server_time, taken_offline")
         .eq("property_id", p.id).gte("server_time", start).lt("server_time", end).order("server_time", { ascending: false }),
       db.from("milestones").select("id, name, completed_checkin_id").eq("property_id", p.id),
-      db.from("viewer_invites").select("email").eq("property_id", p.id).not("accepted_at", "is", null),
+      db.from("viewer_invites").select("email, user_id").eq("property_id", p.id).not("accepted_at", "is", null),
       db.auth.admin.getUserById(p.owner_id),
     ]);
     const C = (cs ?? []) as C[];
@@ -55,7 +55,14 @@ Deno.serve(async (req) => {
     const ids = new Set(C.map((c) => c.id));
     const doneStages = (stages ?? []).filter((s) => s.completed_checkin_id && ids.has(s.completed_checkin_id)).map((s) => s.name as string);
     const latest = C.find((c) => c.verdict === "verified");
-    const recipients = [...new Set([owner.user?.email, ...(viewers ?? []).map((v) => v.email)].filter(Boolean) as string[])];
+    // Respect "monthly summary: off" on the owner's and viewers' account pages.
+    const { data: off } = await db.from("email_prefs").select("user_id").eq("digest", false)
+      .in("user_id", [p.owner_id, ...(viewers ?? []).map((v) => v.user_id).filter(Boolean)]);
+    const offIds = new Set((off ?? []).map((o) => o.user_id));
+    const recipients = [...new Set([
+      offIds.has(p.owner_id) ? null : owner.user?.email,
+      ...(viewers ?? []).filter((v) => !offIds.has(v.user_id)).map((v) => v.email),
+    ].filter(Boolean) as string[])];
 
     const total = counted.length;
     const subject = total === 0
@@ -96,7 +103,7 @@ Deno.serve(async (req) => {
   ${doneStages.length ? `<p style="margin:0 0 14px;font-size:16px;line-height:1.5"><strong>Stages confirmed:</strong> ${doneStages.map(esc).join(", ")}</p>` : ""}
   ${photo ? `<p style="margin:0 0 6px;font-size:14px;color:#3d5149">Latest verified photo</p><img src="${photo}" alt="Latest verified photo of ${esc(p.label)}" width="472" style="width:100%;max-width:472px;border-radius:4px;display:block;margin:0 0 18px">` : ""}
   <p style="margin:0 0 24px"><a href="${link}" style="background:#10251f;color:#fff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:4px;display:inline-block">See the progress</a></p>`}
-  <p style="margin:0;font-size:13px;color:#3d5149">You get this once a month because you watch ${esc(p.label)} on Groundproof.</p>
+  <p style="margin:0;font-size:13px;color:#3d5149">You get this once a month because you watch ${esc(p.label)} on Groundproof. <a href="${site}/account#emails" style="color:#3d5149">Turn it off</a>.</p>
 </div>`;
 
     let sent = 0;

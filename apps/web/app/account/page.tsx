@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { DeleteForm } from "./DeleteForm";
 import { ReporterProfileForm } from "@/components/ReporterProfileForm";
+import { EmailPrefsForm } from "@/components/EmailPrefsForm";
 import { ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
 
 export default async function Account() {
@@ -13,6 +14,7 @@ export default async function Account() {
   const { count: reporting } = await supabase.from("property_members")
     .select("property_id", { count: "exact", head: true }).eq("user_id", user.id).eq("role", "reporter");
   const isReporter = (reporting ?? 0) > 0;
+  const { data: prefs } = await supabase.from("email_prefs").select("tips, digest").eq("user_id", user.id).maybeSingle();
   const [{ data: profile }, { data: record }] = isReporter
     ? await Promise.all([
         supabase.from("reporter_profiles").select("slug, display_name, state, areas, bio, is_public").eq("user_id", user.id).maybeSingle(),
@@ -39,6 +41,11 @@ export default async function Account() {
           <ReporterProfileForm profile={profile} />
         </div>
       )}
+
+      <div className="panel" id="emails" style={{ marginTop: "2rem" }}>
+        <h2>Emails</h2>
+        <EmailPrefsForm tips={prefs?.tips ?? true} digest={prefs?.digest ?? true} />
+      </div>
 
       <div className="panel" style={{ marginTop: "2rem" }}>
         <h2>Delete your account</h2>
