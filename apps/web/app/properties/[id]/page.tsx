@@ -313,6 +313,9 @@ export default async function PropertyPage({
                 <form action={createInvite.bind(null, property.id)}>
                   <p className="small muted">Create a one-time code for a relative, contractor or agent to join this property.</p>
                   <button className="btn secondary" type="submit">Create invite code</button>
+                  {(reporterCount ?? 0) === 0 && (
+                    <p className="small" style={{ marginTop: "0.75rem" }}>No one to send? <Link href="/find-someone">We&apos;ll find someone</Link>.</p>
+                  )}
                 </form>
               )}
             </div>

@@ -15,3 +15,21 @@ export async function joinWaitlist(_prev: FormState, form: FormData): Promise<Fo
   if (error && error.code !== "23505") return { error: "Couldn't save that. Try again in a minute." };
   return { ok: "You're on the list. We'll email you when pilots open." };
 }
+
+/** "Find someone" and "become a reporter" forms. Saved and emailed by the submit-lead edge function. */
+export async function submitLead(_prev: FormState, form: FormData): Promise<FormState> {
+  const body: Record<string, unknown> = {};
+  form.forEach((v, k) => { body[k] = typeof v === "string" ? v : ""; });
+  const supabase = createClient();
+  const { error } = await supabase.functions.invoke("submit-lead", { body });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const res = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    return { error: res?.error ?? "Couldn't send that. Try again in a minute." };
+  }
+  return {
+    ok: body.kind === "reporter"
+      ? "Thanks, you're on our list. We've emailed you a copy, and we'll contact you when an owner near you needs someone."
+      : "Thanks, we've got it. Check your email for a copy. We'll come back to you within 3 working days.",
+  };
+}

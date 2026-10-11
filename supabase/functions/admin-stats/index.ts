@@ -25,6 +25,10 @@ Deno.serve(async (req) => {
     db.from("payments").select("id, property_id, user_id, product, amount_ngn, status, created_at, paid_at").order("created_at", { ascending: false }).limit(500),
     db.from("waitlist").select("email, plan, created_at").order("created_at", { ascending: false }).limit(500),
   ]);
+  const [{ data: groundRequests }, { data: reporterApps }] = await Promise.all([
+    db.from("ground_requests").select("id, name, email, phone, state, area, property_type, frequency, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
+    db.from("reporter_applications").select("id, name, email, phone, state, areas, occupation, android, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
+  ]);
 
   // Emails for owners and reporters
   const emails = new Map<string, string>();
@@ -61,6 +65,8 @@ Deno.serve(async (req) => {
       paidNgn: paid.reduce((t, p) => t + p.amount_ngn, 0),
       shareLinks: P.filter((p) => p.share_token).length,
     },
+    groundRequests: groundRequests ?? [],
+    reporterApplications: reporterApps ?? [],
     funnel: [
       { step: "Joined waitlist", count: W.length },
       { step: "Added a property", count: owners.size },

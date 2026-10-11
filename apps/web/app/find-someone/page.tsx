@@ -1,0 +1,46 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { OwnerRequestForm } from "@/components/LeadForms";
+
+export const metadata: Metadata = {
+  title: "No one on the ground? We'll find someone — Groundproof",
+  description: "Building or buying in Nigeria from abroad, with no trusted relative nearby? We match you with a local person who visits with the Groundproof app, and every visit is still verified.",
+};
+
+export default function FindSomeone() {
+  return (
+    <main className="wrap page narrow">
+      <h1>No one on the ground? We&apos;ll find someone.</h1>
+      <p className="lede">
+        Lots of people building or buying in Nigeria from abroad don&apos;t have a relative they can send, or don&apos;t want to.
+        Tell us where your property is and we&apos;ll match you with a local person: a surveyor, estate agent or builder who visits with the Groundproof app.
+      </p>
+
+      <div className="panel">
+        <h2 style={{ marginTop: 0 }}>You don&apos;t have to take their word for it</h2>
+        <p style={{ marginBottom: 0 }}>
+          That&apos;s the point. Every visit is still checked against the building&apos;s NIPOST postcode, the phone&apos;s GPS and compass, and the anchor photos.
+          If someone sends old photos or checks in from somewhere else, you see it flagged.
+        </p>
+      </div>
+
+      <h2>How it works</h2>
+      <ol className="steps-plain">
+        <li>Fill in the form. It takes a minute.</li>
+        <li>Within 3 working days we email you someone who covers your area, what they charge per visit, and when they can start.</li>
+        <li>If you&apos;re happy, you send them your property&apos;s invite code. Their first visit anchors the property, and you see every check-in from then on.</li>
+      </ol>
+      <p className="small muted">
+        You agree the visit fee with them directly. Groundproof check-ins are priced as normal. We&apos;re building this network now, so in areas
+        where we don&apos;t have anyone yet, we&apos;ll tell you honestly.
+      </p>
+
+      <h2>Tell us about your property</h2>
+      <OwnerRequestForm />
+
+      <p className="small muted" style={{ marginTop: "2rem" }}>
+        Live in Nigeria and want to earn from visits? <Link href="/become-a-reporter">Apply to be a reporter</Link>.
+      </p>
+    </main>
+  );
+}

@@ -25,6 +25,7 @@ export default function Privacy() {
         <li><strong>Device details</strong>: phone make, model and operating system, and whether the app is running on a real phone or an emulator. We use this to detect faked check-ins.</li>
         <li><strong>Payment records</strong>: what you bought, the amount and the Paystack transaction reference. Card and bank details are handled by Paystack; we never see or store them.</li>
         <li><strong>Waitlist emails</strong> if you join the waitlist on our website.</li>
+        <li><strong>Contact details and area</strong> you give us in the &ldquo;find someone on the ground&rdquo; or &ldquo;become a reporter&rdquo; forms. We use them only to match owners with local reporters and to reply to you.</li>
       </ul>
 
       <h2>How we use it</h2>

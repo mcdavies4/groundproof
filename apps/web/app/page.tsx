@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { WaitlistForm } from "@/components/WaitlistForm";
@@ -108,6 +109,24 @@ export default function Home() {
           <p className="small muted" style={{ marginTop: "1.25rem" }}>
             Paying from abroad? UK and other international cards work. Prices are in naira and your bank converts at checkout.
           </p>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
+          <h2>No one on the ground?</h2>
+          <div className="ground-cta">
+            <div className="panel">
+              <h3 style={{ marginTop: 0 }}>Own property in Nigeria</h3>
+              <p>No relative you can send? We&apos;ll match you with a local surveyor, agent or builder, and every visit they make is still verified.</p>
+              <Link className="btn" href="/find-someone">Find me someone</Link>
+            </div>
+            <div className="panel">
+              <h3 style={{ marginTop: 0 }}>Live in Nigeria</h3>
+              <p>Earn from property visits in your area for owners abroad. You need an Android phone and an eye for detail.</p>
+              <Link className="btn secondary" href="/become-a-reporter">Become a reporter</Link>
+            </div>
+          </div>
         </div>
       </section>
 

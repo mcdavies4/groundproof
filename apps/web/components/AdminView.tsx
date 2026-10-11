@@ -23,6 +23,8 @@ export interface Stats {
   }[];
   payments: { time: string; property: string; who: string; product: string; amount: number; status: string }[];
   waitlist: { email: string; plan: string | null; created_at: string }[];
+  groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string }[];
+  reporterApplications?: { id: string; name: string; email: string; phone: string; state: string; areas: string; occupation: string; android: boolean; notes: string | null; status: string; created_at: string }[];
 }
 
 const naira = new Intl.NumberFormat("en-GB", { style: "currency", currency: "NGN", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 });
@@ -144,6 +146,43 @@ export function AdminView({ s }: { s: Stats }) {
 
       <div className="admin-grid">
         <section className="panel admin-table">
+          <h2>Need someone on the ground</h2>
+          <table className="sides">
+            <thead><tr><th>When</th><th>Who</th><th>Where</th><th>What</th></tr></thead>
+            <tbody>
+              {(s.groundRequests ?? []).map((g) => (
+                <tr key={g.id}>
+                  <td>{day(g.created_at)}</td>
+                  <td>{g.name}<div className="small"><a href={`mailto:${g.email}?subject=${encodeURIComponent("Your Groundproof request")}`}>{g.email}</a>{g.phone && <> · {g.phone}</>}</div></td>
+                  <td>{g.area}, {g.state}</td>
+                  <td>{LEAD_LABEL[g.property_type] ?? g.property_type}, {LEAD_LABEL[g.frequency] ?? g.frequency}{g.notes && <div className="small muted">{g.notes}</div>}</td>
+                </tr>
+              ))}
+              {(s.groundRequests ?? []).length === 0 && <tr><td colSpan={4} className="muted">No requests yet.</td></tr>}
+            </tbody>
+          </table>
+        </section>
+        <section className="panel admin-table">
+          <h2>Want to do visits</h2>
+          <table className="sides">
+            <thead><tr><th>When</th><th>Who</th><th>Covers</th><th>About</th></tr></thead>
+            <tbody>
+              {(s.reporterApplications ?? []).map((r) => (
+                <tr key={r.id}>
+                  <td>{day(r.created_at)}</td>
+                  <td>{r.name}<div className="small"><a href={`mailto:${r.email}`}>{r.email}</a> · {r.phone}</div></td>
+                  <td>{r.areas}, {r.state}</td>
+                  <td>{LEAD_LABEL[r.occupation] ?? r.occupation}{!r.android && <span className="tag">no Android</span>}{r.notes && <div className="small muted">{r.notes}</div>}</td>
+                </tr>
+              ))}
+              {(s.reporterApplications ?? []).length === 0 && <tr><td colSpan={4} className="muted">No applications yet.</td></tr>}
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <div className="admin-grid">
+        <section className="panel admin-table">
           <h2>Payments</h2>
           <table className="sides">
             <thead><tr><th>When</th><th>Who</th><th>What</th><th>Amount</th><th>Status</th></tr></thead>
@@ -169,6 +208,12 @@ export function AdminView({ s }: { s: Stats }) {
     </main>
   );
 }
+
+const LEAD_LABEL: Record<string, string> = {
+  building: "Being built", completed: "Finished house", land: "Land", rental: "Rental",
+  once: "one visit", monthly: "monthly", fortnightly: "every 2 weeks", weekly: "weekly",
+  surveyor: "Surveyor", agent: "Estate agent", builder: "Builder", corps_member: "Corps member", student: "Student", other: "Other",
+};
 
 function Tile({ n, label, sub }: { n: number | string; label: string; sub: string }) {
   return (
