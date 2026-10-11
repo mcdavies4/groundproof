@@ -1,3 +1,16 @@
+import { VISIT_ORDER, VISIT_TYPES, naira, type VisitType } from "@/lib/rates";
+
+/** "Standard visit ₦8,000 · Distance visit ₦12,000" */
+export function ReporterPrices({ rates }: { rates?: Partial<Record<VisitType, number>> | null }) {
+  const set = VISIT_ORDER.filter((t) => rates?.[t]);
+  if (!set.length) return null;
+  return (
+    <p className="prices">
+      {set.map((t) => <span key={t}>{VISIT_TYPES[t].name} <strong>{naira(rates![t]!)}</strong></span>)}
+    </p>
+  );
+}
+
 export interface ReporterStats {
   visits: number; verified: number; review?: number; flagged: number;
   properties?: number; first_visit?: string | null; last_visit: string | null;

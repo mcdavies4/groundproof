@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/app/actions";
@@ -64,4 +65,32 @@ export async function saveEmailPrefs(_prev: FormState, form: FormData): Promise<
     updated_at: new Date().toISOString(),
   });
   return error ? { error: "Couldn't save. Try again." } : { ok: "Saved." };
+}
+
+export async function agreeReporterRules(_prev: FormState, form: FormData): Promise<FormState> {
+  if (form.get("agree") !== "on") return { error: "Tick the box to agree to the rules." };
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in again." };
+  const { error } = await supabase.from("reporter_profiles").update({ agreed_rules_at: new Date().toISOString() }).eq("user_id", user.id);
+  if (error) return { error: "Create your reporter profile first, then agree to the rules." };
+  revalidatePath("/account");
+  return { ok: "Thanks. You can set your prices now." };
+}
+
+export async function saveReporterRates(_prev: FormState, form: FormData): Promise<FormState> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in again." };
+  for (const t of ["standard", "distance", "first"] as const) {
+    const raw = String(form.get(t) ?? "").replace(/[^\d]/g, "");
+    if (!raw) {
+      await supabase.from("reporter_rates").delete().eq("user_id", user.id).eq("visit_type", t);
+      continue;
+    }
+    const { error } = await supabase.from("reporter_rates").upsert({ user_id: user.id, visit_type: t, price_ngn: Number(raw) });
+    if (error) return { error: error.message.replace(/^[A-Z_]+:\s*/, "") };
+  }
+  revalidatePath("/account");
+  return { ok: "Prices saved." };
 }

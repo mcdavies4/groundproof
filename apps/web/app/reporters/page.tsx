@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { STATES } from "@/lib/nigeria";
-import { ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
+import { ReporterPrices, ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "Local people in Nigeria who visit properties for owners abroad, with a record built from verified check-ins.",
 };
 
-type Row = ReporterStats & { slug: string; display_name: string; state: string; areas: string };
+type Row = ReporterStats & { slug: string; display_name: string; state: string; areas: string; rates: Record<string, number> };
 
 export default async function Reporters({ searchParams }: { searchParams: { state?: string } }) {
   const state = STATES.includes(searchParams.state as (typeof STATES)[number]) ? searchParams.state! : null;
@@ -52,6 +52,7 @@ export default async function Reporters({ searchParams }: { searchParams: { stat
                   <strong>{r.display_name}</strong>
                   <div className="small muted">{r.areas}, {r.state}</div>
                   <ReporterRecord r={r} />
+                  <ReporterPrices rates={r.rates} />
                 </div>
               </Link>
             </li>
@@ -60,7 +61,7 @@ export default async function Reporters({ searchParams }: { searchParams: { stat
       )}
 
       <p className="small muted" style={{ marginTop: "2rem" }}>
-        Want to be listed? <Link href="/become-a-reporter">Apply to be a reporter</Link>.
+        Prices are full prices, inside <Link href="/rates">Groundproof&apos;s ranges</Link>. Want to be listed? <Link href="/become-a-reporter">Apply to be a reporter</Link>.
       </p>
     </main>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ReporterApplyForm } from "@/components/LeadForms";
+import { REPORTER_RULES } from "@/lib/rates";
 
 export const metadata: Metadata = {
   title: "Earn from property visits near you — Groundproof",
@@ -38,9 +39,12 @@ export default function BecomeAReporter() {
         <Link href="/reporters">See the reporters list</Link>.
       </p>
 
+      <h2>The rules</h2>
+      <ol>{REPORTER_RULES.map((r) => <li key={r}>{r}</li>)}</ol>
+
       <h2>Pay</h2>
       <p>
-        You agree a fee per visit with each owner before you start, and they pay you directly. We&apos;re growing the network area by area,
+        You set your price per visit inside <Link href="/rates">Groundproof&apos;s range for your state</Link>, and owners pay you directly. We&apos;re growing the network area by area,
         so we&apos;ll contact you when an owner near you needs someone.
       </p>
 

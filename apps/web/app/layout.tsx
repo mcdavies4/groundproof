@@ -49,6 +49,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/tools/plot-check">Plot check</Link>
             <Link href="/find-someone">Find someone on the ground</Link>
             <Link href="/reporters">Reporters</Link>
+            <Link href="/rates">Visit prices</Link>
+            <Link href="/developers">For developers</Link>
             <Link href="/become-a-reporter">Become a reporter</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>

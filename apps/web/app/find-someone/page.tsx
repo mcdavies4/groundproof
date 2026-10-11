@@ -32,7 +32,8 @@ export default function FindSomeone({ searchParams }: { searchParams: { reporter
         <li>If you&apos;re happy, you send them your property&apos;s invite code. Their first visit anchors the property, and you see every check-in from then on.</li>
       </ol>
       <p className="small muted">
-        You agree the visit fee with them directly. Groundproof check-ins are priced as normal. We&apos;re building this network now, so in areas
+        You pay one price per visit, inside <Link href="/rates">our range for your state</Link>, agreed in writing before the first visit. During the pilot,
+        Groundproof&apos;s checks on these visits are free, so you never pay twice. We&apos;re building this network now, so in areas
         where we don&apos;t have anyone yet, we&apos;ll tell you honestly.
       </p>
 

@@ -351,6 +351,39 @@ label.radio input { width: 22px; height: 22px; accent-color: var(--ink); }
 .list.reporters .record { margin-top: 0.75rem; }
 .list.reporters .record-stats strong { font-size: 1.25rem; }
 
+/* ---------- estates ---------- */
+.unit-gen { display: grid; grid-template-columns: 1fr 70px 70px auto; gap: 0.5rem; align-items: end; margin-bottom: 1rem; }
+.unit-gen label { font-size: 0.85rem; }
+@media (max-width: 420px) { .unit-gen { grid-template-columns: 1fr 1fr; } }
+.buyer-results { list-style: none; padding: 0; margin: 1rem 0 0; font-size: 0.92rem; }
+.buyer-results li { padding: 0.35rem 0 0.35rem 0.6rem; border-left: 3px solid var(--verified); margin-bottom: 0.3rem; }
+.buyer-results li.bad { border-left-color: var(--flagged); }
+.estate-grid { list-style: none; padding: 0; margin: 2rem 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.25rem; }
+.estate-grid li { display: flex; flex-direction: column; gap: 0.3rem; }
+.estate-grid img, .estate-noimg { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius); background: var(--concrete); }
+.estate-noimg { display: flex; align-items: center; justify-content: center; text-align: center; padding: 1rem; font-size: 0.9rem; color: var(--ink-soft); }
+
+/* ---------- video check-ins ---------- */
+.walk-video { display: block; width: 100%; max-width: 360px; aspect-ratio: 9 / 16; max-height: 480px; margin-top: 0.75rem; background: #000; border-radius: var(--radius); }
+.video-toggle { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding-bottom: 0.9rem; margin-bottom: 0.9rem; border-bottom: 1px solid var(--concrete); }
+.video-toggle .link-btn { flex-shrink: 0; }
+
+/* ---------- plot visits ---------- */
+.plot-shape { margin: 1rem 0 1.5rem; }
+.plot-shape svg { width: 100%; max-width: 440px; height: auto; display: block; background: var(--surface); border: 1px solid var(--concrete); border-radius: var(--radius); }
+.beacon-photos { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.beacon-photos figure { margin: 0; width: 96px; }
+.beacon-photos img { width: 96px; height: 128px; object-fit: cover; border-radius: var(--radius); display: block; }
+.beacon-photos figcaption { font-size: 0.8rem; color: var(--ink-soft); }
+
+/* ---------- reporter prices ---------- */
+.prices { display: flex; flex-wrap: wrap; gap: 0.3rem 1.25rem; margin: 0.6rem 0 0; font-size: 0.95rem; }
+.prices strong { font-variant-numeric: tabular-nums; }
+
+.band-form { display: grid; grid-template-columns: 1.4fr 1.4fr 1fr 1fr auto; gap: 0.5rem; align-items: end; margin-top: 1rem; }
+.band-form label { font-size: 0.85rem; }
+@media (max-width: 700px) { .band-form { grid-template-columns: 1fr 1fr; } }
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }

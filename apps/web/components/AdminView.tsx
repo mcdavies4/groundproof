@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Verdict } from "@/lib/types";
+import { AdminPricing, type Band, type Match, type PricingActions } from "./AdminPricing";
 
 export interface Stats {
   generatedAt: string;
@@ -23,7 +24,10 @@ export interface Stats {
   }[];
   payments: { time: string; property: string; who: string; product: string; amount: number; status: string }[];
   waitlist: { email: string; plan: string | null; created_at: string }[];
-  reporters?: { email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
+  developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
+  bands?: Band[];
+  matches?: Match[];
+  reporters?: { id: string; suspended: boolean; hasProfile: boolean; agreedRules: boolean; rates: Record<string, number>; email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
   groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string }[];
   reporterApplications?: { id: string; name: string; email: string; phone: string; state: string; areas: string; occupation: string; android: boolean; notes: string | null; status: string; created_at: string }[];
 }
@@ -32,7 +36,10 @@ const naira = new Intl.NumberFormat("en-GB", { style: "currency", currency: "NGN
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "–");
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export function AdminView({ s }: { s: Stats }) {
+export function AdminView({ s, approve, pricing, suspend, notice }: {
+  s: Stats; approve?: (userId: string) => Promise<void>; pricing?: PricingActions;
+  suspend?: (userId: string, on: boolean) => Promise<void>; notice?: string;
+}) {
   const t = s.totals;
   const top = Math.max(1, ...s.funnel.map((f) => f.count));
   const totalVerdicts = Math.max(1, s.verdicts.verified + s.verdicts.review + s.verdicts.flagged);
@@ -146,11 +153,44 @@ export function AdminView({ s }: { s: Stats }) {
       </section>
 
       <section className="panel admin-table">
+        <h2>Developers</h2>
+        <div className="scroll-x">
+          <table className="sides">
+            <thead><tr><th>Company</th><th>Contact</th><th>Estates</th><th>Units</th><th>Status</th></tr></thead>
+            <tbody>
+              {(s.developers ?? []).map((d) => (
+                <tr key={d.user_id}>
+                  <td>{d.company}{d.website && <div className="small"><a href={d.website.startsWith("http") ? d.website : `https://${d.website}`} target="_blank" rel="noreferrer">{d.website}</a></div>}</td>
+                  <td><a href={`mailto:${d.email}`}>{d.email}</a>{d.phone && <div className="small muted">{d.phone}</div>}</td>
+                  <td>{d.estates}</td>
+                  <td>{d.units}</td>
+                  <td>
+                    {d.approved ? "Approved" : approve ? (
+                      <form action={approve.bind(null, d.user_id)}><button className="btn secondary" type="submit">Approve</button></form>
+                    ) : "Waiting"}
+                  </td>
+                </tr>
+              ))}
+              {(s.developers ?? []).length === 0 && <tr><td colSpan={5} className="muted">No developer applications yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {pricing && (
+        <AdminPricing
+          bands={s.bands ?? []} matches={s.matches ?? []} actions={pricing} notice={notice}
+          reporters={(s.reporters ?? []).map((r) => ({ id: r.id, name: r.name, email: r.email, where: r.where, suspended: r.suspended, hasProfile: r.hasProfile }))}
+          requests={(s.groundRequests ?? []).map((g) => ({ id: g.id, name: g.name, email: g.email, area: g.area, state: g.state, status: g.status }))}
+        />
+      )}
+
+      <section className="panel admin-table">
         <h2>Reporters by record</h2>
         <p className="small muted">Best first. Offer new owners to the top reporter in their area.</p>
         <div className="scroll-x">
           <table className="sides">
-            <thead><tr><th>Reporter</th><th>Covers</th><th>Visits</th><th>Verified</th><th>Flagged</th><th>Properties</th><th>Last visit</th></tr></thead>
+            <thead><tr><th>Reporter</th><th>Covers</th><th>Visits</th><th>Verified</th><th>Flagged</th><th>Properties</th><th>Last visit</th><th>Prices</th><th /></tr></thead>
             <tbody>
               {(s.reporters ?? []).map((r) => (
                 <tr key={r.email}>
@@ -161,9 +201,17 @@ export function AdminView({ s }: { s: Stats }) {
                   <td style={r.flagged ? { color: "var(--flagged)", fontWeight: 700 } : undefined}>{r.flagged}</td>
                   <td>{r.properties}</td>
                   <td>{r.last ? day(r.last) : "-"}</td>
+                  <td className="small">{Object.keys(r.rates ?? {}).length
+                    ? Object.entries(r.rates).map(([t, n]) => <div key={t}>{t}: {naira.format(n)}</div>)
+                    : <span className="muted">{r.hasProfile ? (r.agreedRules ? "not set" : "rules not agreed") : "-"}</span>}</td>
+                  <td>{suspend && r.hasProfile && (
+                    <form action={suspend.bind(null, r.id, !r.suspended)}>
+                      <button className="link-btn" type="submit" style={r.suspended ? undefined : { color: "var(--flagged)" }}>{r.suspended ? "Unsuspend" : "Suspend"}</button>
+                    </form>
+                  )}{r.suspended && <span className="tag">suspended</span>}</td>
                 </tr>
               ))}
-              {(s.reporters ?? []).length === 0 && <tr><td colSpan={7} className="muted">No reporters yet.</td></tr>}
+              {(s.reporters ?? []).length === 0 && <tr><td colSpan={9} className="muted">No reporters yet.</td></tr>}
             </tbody>
           </table>
         </div>

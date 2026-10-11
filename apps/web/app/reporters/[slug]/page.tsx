@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
+import { ReporterPrices, ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
 
 export const dynamic = "force-dynamic";
 
-type Profile = ReporterStats & { slug: string; display_name: string; state: string; areas: string; bio: string | null; joined: string };
+type Profile = ReporterStats & { slug: string; display_name: string; state: string; areas: string; bio: string | null; joined: string; rates: Record<string, number> };
 
 async function load(slug: string) {
   const supabase = createClient();
@@ -46,6 +46,14 @@ export default async function ReporterPage({ params }: { params: { slug: string 
         <>
           <h2>About</h2>
           <p style={{ whiteSpace: "pre-line" }}>{p.bio}</p>
+        </>
+      )}
+
+      {Object.keys(p.rates ?? {}).length > 0 && (
+        <>
+          <h2>Prices per visit</h2>
+          <ReporterPrices rates={p.rates} />
+          <p className="small muted">Full prices, no extras, inside <Link href="/rates">Groundproof&apos;s range for {p.state}</Link>. During the pilot, Groundproof&apos;s checks on these visits are free.</p>
         </>
       )}
 

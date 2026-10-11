@@ -3,12 +3,14 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, cancelRequest, createInvite, requestCheckin, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, cancelRequest, createInvite, requestCheckin, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
 import { ProgressView, type ProgressShot } from "@/components/ProgressView";
+import { PlotDetail } from "@/components/PlotDetail";
+import { VISIT_TYPES, naira, type VisitType } from "@/lib/rates";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -26,6 +28,10 @@ export default async function PropertyPage({
   const { data: property } = await supabase.from("properties").select("*").eq("id", params.id).single<Property>();
   if (!property) notFound();
   const isOwner = (property as Property & { owner_id: string }).owner_id === user.id;
+  const estateId = (property as Property & { estate_id?: string | null }).estate_id ?? null;
+  const { data: estate } = estateId
+    ? await supabase.from("estates").select("id, name").eq("id", estateId).maybeSingle()
+    : { data: null };
 
   const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }, { data: requests }, { count: reporterCount }] = await Promise.all([
     supabase.from("milestones").select("*").eq("property_id", property.id).order("sort"),
@@ -64,6 +70,12 @@ export default async function PropertyPage({
     const { data: signed } = await supabase.storage.from("checkins").createSignedUrls(paths, 60 * 60);
     for (const s of signed ?? []) if (s.path && s.signedUrl) urls.set(s.path, s.signedUrl);
   }
+  const videoPaths = ((checkins ?? []) as Checkin[]).map((c) => c.video_path).filter((p): p is string => !!p);
+  const videoUrls = new Map<string, string>();
+  if (videoPaths.length) {
+    const { data: signed } = await supabase.storage.from("checkin-videos").createSignedUrls(videoPaths, 60 * 60);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) videoUrls.set(s.path, s.signedUrl);
+  }
 
   const ms = (milestones ?? []) as Milestone[];
   const msName = new Map(ms.map((m) => [m.id, m.name]));
@@ -89,13 +101,24 @@ export default async function PropertyPage({
   const invite = invites?.[0];
   const inviteLive = invite && !invite.used_at && new Date(invite.expires_at) > new Date();
   const admin = property.nipost_address?.administrative;
+  const isPlot = property.kind === "plot";
+  const { data: activeMatches } = isOwner
+    ? await supabase.from("matches").select("visit_type, price_ngn, frequency").eq("property_id", property.id).eq("status", "active")
+    : { data: [] as { visit_type: VisitType; price_ngn: number; frequency: string }[] };
 
   return (
     <main className="wrap page">
       <div className="page-head">
         <div>
+          {estate && (
+            <p className="small" style={{ margin: "0 0 0.3rem" }}>
+              {isOwner ? <Link href={`/estates/${estate.id}`}>{estate.name}</Link> : estate.name}
+            </p>
+          )}
           <h1 style={{ marginBottom: "0.6rem" }}>{property.label}</h1>
-          {property.postcode ? (
+          {isPlot ? (
+            <p className="muted" style={{ margin: 0 }}>Plot to check before buying · {(property.beacons ?? []).length} beacons</p>
+          ) : property.postcode ? (
             <PostcodePlate code={property.postcode} size="md" />
           ) : property.anchor_mode === "coordinates" ? (
             <p className="muted" style={{ margin: 0 }}>Anchored by location. NIPOST has no building listed here yet.</p>
@@ -126,6 +149,7 @@ export default async function PropertyPage({
       )}
 
       <div className="two-col">
+        {isPlot ? <PlotDetail supabase={supabase} property={property} /> : (
         <section aria-labelledby="log">
           {anchorShot && <ProgressView anchor={anchorShot} later={laterShots} timeline={timeline} />}
 
@@ -179,6 +203,11 @@ export default async function PropertyPage({
                     {c.is_emulator && <span style={{ color: "var(--flagged)" }}>Emulator</span>}
                     {c.taken_offline && <span>Taken offline, uploaded later</span>}
                   </div>
+                  {c.video_path && videoUrls.get(c.video_path) && (
+                    <video className="walk-video" controls preload="none" playsInline src={videoUrls.get(c.video_path)}>
+                      <a href={videoUrls.get(c.video_path)}>Download the walk-round video</a>
+                    </video>
+                  )}
                   <div className="photos">
                     {c.photo_paths.map((p) =>
                       urls.get(p) ? (
@@ -194,8 +223,10 @@ export default async function PropertyPage({
             </ol>
           )}
         </section>
+        )}
 
         <aside>
+          {!isPlot && <>
           <div className="panel">
             <h3>On record at NIPOST</h3>
             <dl className="facts">
@@ -229,6 +260,8 @@ export default async function PropertyPage({
               </div>
             )}
           </div>
+
+          </>}
 
           {isOwner && <PlanPanel property={property} error={searchParams.payment === "error"} />}
 
@@ -269,7 +302,21 @@ export default async function PropertyPage({
           {isOwner && (
             <div className="panel" id="ground">
               <h3>Person on the ground</h3>
-              {(reporterCount ?? 0) > 0 && (
+              {(activeMatches ?? []).map((m, i) => (
+                <p key={i} className="notice ok small" style={{ marginTop: 0 }}>
+                  <strong>Matched by Groundproof.</strong> {VISIT_TYPES[m.visit_type as VisitType]?.name}, {naira(m.price_ngn)} per visit, all in.
+                  Groundproof&apos;s checks on these visits are free during the pilot. <Link href="/rates">Price rules</Link>
+                </p>
+              ))}
+              {!isPlot && <form action={setRequireVideo.bind(null, property.id, !property.require_video)} className="video-toggle">
+                <p className="small" style={{ margin: 0 }}>
+                  {property.require_video
+                    ? <><strong>Video on.</strong> Every check-in needs a 15-second walk-round video to be verified.</>
+                    : <>Want more than photos? Ask for a 15-second walk-round video with every check-in.</>}
+                </p>
+                <button type="submit" className="link-btn">{property.require_video ? "Turn off" : "Ask for video"}</button>
+              </form>}
+              {!isPlot && (reporterCount ?? 0) > 0 && (
                 <div className="request-box">
                   {openRequest ? (
                     <>
@@ -321,7 +368,7 @@ export default async function PropertyPage({
             </div>
           )}
 
-          <div className="panel">
+          {!isPlot && <div className="panel">
             <h3>Payment stages</h3>
             {ms.length === 0 && <p className="small muted">Add stages to tie each payment to a verified check-in.</p>}
             <ul className="milestones">
@@ -347,7 +394,7 @@ export default async function PropertyPage({
                 <button className="btn secondary" type="submit">Add stage</button>
               </form>
             )}
-          </div>
+          </div>}
         </aside>
       </div>
     </main>
