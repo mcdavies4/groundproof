@@ -10,6 +10,7 @@ type Reporter = { id: string; name: string | null; email: string; where: string 
 type Request = { id: string; name: string; email: string; area: string; state: string; status: string };
 
 export type PricingActions = {
+  setMatchedFree: (on: boolean) => Promise<void>;
   setBand: (form: FormData) => Promise<void>;
   deleteBand: (state: string, visitType: string) => Promise<void>;
   createMatch: (form: FormData) => Promise<void>;
@@ -20,14 +21,29 @@ const FREQ: Record<string, string> = { once: "One visit", monthly: "Monthly", fo
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 /** Rate bands, introductions and matches, on the admin dashboard. */
-export function AdminPricing({ bands, matches, reporters, requests, actions, notice }: {
-  bands: Band[]; matches: Match[]; reporters: Reporter[]; requests: Request[]; actions: PricingActions; notice?: string;
+export function AdminPricing({ bands, matches, reporters, requests, actions, notice, matchedFree }: {
+  bands: Band[]; matches: Match[]; reporters: Reporter[]; requests: Request[]; actions: PricingActions; notice?: string; matchedFree: boolean;
 }) {
   const states = [...new Set(bands.map((b) => b.state))];
   const matchable = reporters.filter((r) => r.hasProfile && !r.suspended);
   return (
     <>
       {notice && <p className={`notice ${notice.startsWith("error:") ? "error" : "ok"}`} role="status">{notice.replace(/^(error|ok):/, "")}</p>}
+
+      <section className="panel switch-panel">
+        <div>
+          <h2 style={{ margin: 0 }}>Matched visits: {matchedFree ? "free (pilot)" : "charged as normal"}</h2>
+          <p className="small muted" style={{ margin: "0.4rem 0 0" }}>
+            {matchedFree
+              ? "Visits by a reporter you introduced don't use the owner's credits or plan. Owners pay the reporter only."
+              : "Visits by a reporter you introduced use the owner's credits or plan, like any other check-in."}
+            {" "}The rates page, reporter profiles, property pages and agreement emails follow this switch.
+          </p>
+        </div>
+        <form action={actions.setMatchedFree.bind(null, !matchedFree)}>
+          <button className={`btn${matchedFree ? "" : " secondary"}`} type="submit">{matchedFree ? "End the free pilot" : "Make matched visits free again"}</button>
+        </form>
+      </section>
 
       <div className="admin-grid">
         <section className="panel admin-table">

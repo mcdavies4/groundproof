@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReporterPrices, ReporterRecord, type ReporterStats } from "@/components/ReporterRecord";
+import { matchedVisitsFree } from "@/lib/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function ReporterPage({ params }: { params: { slug: string } }) {
   const p = await load(params.slug);
   if (!p) notFound();
+  const free = await matchedVisitsFree(createClient());
 
   return (
     <main className="wrap page narrow">
@@ -53,7 +55,7 @@ export default async function ReporterPage({ params }: { params: { slug: string 
         <>
           <h2>Prices per visit</h2>
           <ReporterPrices rates={p.rates} />
-          <p className="small muted">Full prices, no extras, inside <Link href="/rates">Groundproof&apos;s range for {p.state}</Link>. During the pilot, Groundproof&apos;s checks on these visits are free.</p>
+          <p className="small muted">Full prices, no extras, inside <Link href="/rates">Groundproof&apos;s range for {p.state}</Link>.{free ? " During the pilot, Groundproof's checks on these visits are free." : ""}</p>
         </>
       )}
 

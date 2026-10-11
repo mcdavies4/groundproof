@@ -403,6 +403,9 @@ label.radio input { width: 22px; height: 22px; accent-color: var(--ink); }
 .getting-started { border-left: 5px solid var(--plate); margin-bottom: 2rem; }
 .getting-started h2 { margin-top: 0; font-size: 1.3rem; }
 
+.switch-panel { display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+.switch-panel > div { flex: 1 1 360px; }
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }

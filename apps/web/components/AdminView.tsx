@@ -26,6 +26,7 @@ export interface Stats {
   payments: { time: string; property: string; who: string; product: string; amount: number; status: string }[];
   waitlist: { email: string; plan: string | null; created_at: string }[];
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
+  settings?: { matchedVisitsFree: boolean };
   bands?: Band[];
   ownerProperties?: Record<string, { id: string; label: string }[]>;
   staleRequests?: { property: string; propertyId: string; since: string }[];
@@ -186,6 +187,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo }: {
       {pricing && (
         <AdminPricing
           bands={s.bands ?? []} matches={s.matches ?? []} actions={pricing} notice={notice}
+          matchedFree={s.settings?.matchedVisitsFree ?? true}
           reporters={(s.reporters ?? []).map((r) => ({ id: r.id, name: r.name, email: r.email, where: r.where, suspended: r.suspended, hasProfile: r.hasProfile }))}
           requests={(s.groundRequests ?? []).map((g) => ({ id: g.id, name: g.name, email: g.email, area: g.area, state: g.state, status: g.status }))}
         />

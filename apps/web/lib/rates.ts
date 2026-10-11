@@ -8,6 +8,12 @@ export const VISIT_ORDER: VisitType[] = ["standard", "distance", "first"];
 
 export const naira = (n: number) => "₦" + n.toLocaleString("en-GB");
 
+/** Pilot switch, set on the admin page: are matched visits free of Groundproof charges? */
+export async function matchedVisitsFree(supabase: { from: (t: string) => any }): Promise<boolean> {
+  const { data } = await supabase.from("app_settings").select("value").eq("key", "matched_visits_free").maybeSingle();
+  return data ? data.value === true : true;
+}
+
 export const REPORTER_RULES = [
   "Charge within Groundproof's price range for your state. The agreed price is the full price.",
   "No extra charges (transport, data, \"logistics\") unless the owner agrees in writing first.",

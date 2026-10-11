@@ -10,7 +10,7 @@ import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
 import { ProgressView, type ProgressShot } from "@/components/ProgressView";
 import { PlotDetail } from "@/components/PlotDetail";
-import { VISIT_TYPES, naira, type VisitType } from "@/lib/rates";
+import { VISIT_TYPES, matchedVisitsFree, naira, type VisitType } from "@/lib/rates";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -105,6 +105,7 @@ export default async function PropertyPage({
   const { data: activeMatches } = isOwner
     ? await supabase.from("matches").select("visit_type, price_ngn, frequency").eq("property_id", property.id).eq("status", "active")
     : { data: [] as { visit_type: VisitType; price_ngn: number; frequency: string }[] };
+  const matchedFree = (activeMatches ?? []).length ? await matchedVisitsFree(supabase) : true;
 
   return (
     <main className="wrap page">
@@ -305,7 +306,7 @@ export default async function PropertyPage({
               {(activeMatches ?? []).map((m, i) => (
                 <p key={i} className="notice ok small" style={{ marginTop: 0 }}>
                   <strong>Matched by Groundproof.</strong> {VISIT_TYPES[m.visit_type as VisitType]?.name}, {naira(m.price_ngn)} per visit, all in.
-                  Groundproof&apos;s checks on these visits are free during the pilot. <Link href="/rates">Price rules</Link>
+                  {matchedFree ? "Groundproof's checks on these visits are free during the pilot." : "Each visit's check uses your plan or check-ins."} <Link href="/rates">Price rules</Link>
                 </p>
               ))}
               {!isPlot && <form action={setRequireVideo.bind(null, property.id, !property.require_video)} className="video-toggle">

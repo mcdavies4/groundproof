@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OwnerRequestForm } from "@/components/LeadForms";
+import { createClient } from "@/lib/supabase/server";
+import { matchedVisitsFree } from "@/lib/rates";
 
 export const metadata: Metadata = {
   title: "No one on the ground? We'll find someone — Groundproof",
   description: "Building or buying in Nigeria from abroad, with no trusted relative nearby? We match you with a local person who visits with the Groundproof app, and every visit is still verified.",
 };
 
-export default function FindSomeone({ searchParams }: { searchParams: { reporter?: string } }) {
+export default async function FindSomeone({ searchParams }: { searchParams: { reporter?: string } }) {
+  const free = await matchedVisitsFree(createClient());
   const reporter = /^[a-z0-9-]{3,40}$/.test(searchParams.reporter ?? "") ? searchParams.reporter! : null;
   return (
     <main className="wrap page narrow">
@@ -32,8 +35,8 @@ export default function FindSomeone({ searchParams }: { searchParams: { reporter
         <li>If you&apos;re happy, you send them your property&apos;s invite code. Their first visit anchors the property, and you see every check-in from then on.</li>
       </ol>
       <p className="small muted">
-        You pay one price per visit, inside <Link href="/rates">our range for your state</Link>, agreed in writing before the first visit. During the pilot,
-        Groundproof&apos;s checks on these visits are free, so you never pay twice. We&apos;re building this network now, so in areas
+        You pay one price per visit, inside <Link href="/rates">our range for your state</Link>, agreed in writing before the first visit.
+        {free ? " During the pilot, Groundproof's checks on these visits are free, so you never pay twice." : " Groundproof's checks are covered by your plan or check-ins, as normal."} We&apos;re building this network now, so in areas
         where we don&apos;t have anyone yet, we&apos;ll tell you honestly.
       </p>
 

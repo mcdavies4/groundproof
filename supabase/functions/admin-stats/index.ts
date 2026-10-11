@@ -70,6 +70,13 @@ Deno.serve(async (req) => {
   const FREQ: Record<string, string> = { once: "one visit", monthly: "monthly", fortnightly: "every 2 weeks", weekly: "weekly" };
   const ngn = (n: number) => "₦" + n.toLocaleString("en-GB");
 
+  if (body.action === "set_setting" && body.key === "matched_visits_free") {
+    await db.from("app_settings").upsert({ key: "matched_visits_free", value: body.value === true, updated_at: new Date().toISOString() });
+    return json({ ok: true });
+  }
+  const { data: freeRow } = await db.from("app_settings").select("value").eq("key", "matched_visits_free").maybeSingle();
+  const matchedFree = freeRow ? freeRow.value === true : true;
+
   if (body.action === "set_band") {
     const state = String(body.state ?? "").trim(), visitType = String(body.visit_type ?? "");
     const min = Math.round(Number(body.min_ngn)), max = Math.round(Number(body.max_ngn));
@@ -176,7 +183,7 @@ Deno.serve(async (req) => {
     const rules = `<ul style="margin:0 0 18px;padding-left:20px;font-size:15px;line-height:1.6">
 <li>The price above is the full price. No extra charges (transport, data, "logistics") unless the owner agrees in writing first.</li>
 <li>Every visit is done in the Groundproof app at the property, so it can be verified.</li>
-<li>During the pilot, Groundproof's checks are free on these visits. The owner pays the reporter only.</li>
+${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these visits. The owner pays the reporter only.</li>" : "<li>The owner's Groundproof plan or check-ins cover the verification of each visit. The reporter's price above is separate.</li>"}
 <li>For 12 months from this introduction, all visits between you are arranged and done through Groundproof, not around it. That keeps every visit verified, and keeps the reporter's record growing.</li>
 <li>Any problem, just reply to this email.</li></ul>`;
     const mail = (to: string, intro: string) => key && from ? fetch("https://api.resend.com/emails", {
@@ -301,6 +308,7 @@ Deno.serve(async (req) => {
       estates: (estates ?? []).filter((e) => e.developer_id === d.user_id).length,
       units: P.filter((p) => p.owner_id === d.user_id && (p as { estate_id?: string | null }).estate_id).length,
     })),
+    settings: { matchedVisitsFree: matchedFree },
     bands: bands ?? [],
     // Each owner's own properties (not estate units), for linking matches.
     ownerProperties: (() => {

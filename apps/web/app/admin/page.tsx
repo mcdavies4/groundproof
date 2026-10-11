@@ -62,6 +62,11 @@ async function closeRequest(id: string) {
   await adminAction({ action: "close_request", id });
   revalidatePath("/admin");
 }
+async function setMatchedFree(on: boolean) {
+  "use server";
+  await adminAction({ action: "set_setting", key: "matched_visits_free", value: on });
+  redirect(`/admin?notice=${encodeURIComponent(on ? "ok:Matched visits are free again." : "ok:Free pilot ended. Matched visits now use the owner's credits or plan.")}`);
+}
 async function endMatch(id: string) {
   "use server";
   await adminAction({ action: "end_match", match_id: id });
@@ -82,7 +87,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { noti
   return (
     <AdminView
       s={s} approve={approveDeveloper} suspend={suspendReporter} notice={searchParams.notice}
-      pricing={{ setBand, deleteBand, createMatch, endMatch }}
+      pricing={{ setBand, deleteBand, createMatch, endMatch, setMatchedFree }}
       todo={{ introduce: createMatch, review: reviewApplication, link: linkMatch, close: closeRequest }}
     />
   );

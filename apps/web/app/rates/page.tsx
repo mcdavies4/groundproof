@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Fragment } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { REPORTER_RULES, VISIT_ORDER, VISIT_TYPES, naira, type VisitType } from "@/lib/rates";
+import { REPORTER_RULES, VISIT_ORDER, VISIT_TYPES, matchedVisitsFree, naira, type VisitType } from "@/lib/rates";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -16,6 +16,7 @@ export default async function Rates() {
   const supabase = createClient();
   const { data } = await supabase.from("rate_bands").select("state, visit_type, min_ngn, max_ngn").order("state");
   const bands = (data ?? []) as Band[];
+  const free = await matchedVisitsFree(supabase);
   const states = [...new Set(bands.map((b) => b.state))];
 
   return (
@@ -30,7 +31,9 @@ export default async function Rates() {
         <h2 style={{ marginTop: 0 }}>One price. No extras.</h2>
         <ul style={{ marginBottom: 0 }}>
           <li>The agreed price is the full price: no transport, data or &ldquo;logistics&rdquo; added on later.</li>
-          <li>During the pilot, Groundproof&apos;s checks on these visits are free. You pay the reporter only, never twice.</li>
+          {free
+            ? <li>During the pilot, Groundproof&apos;s checks on these visits are free. You pay the reporter only, never twice.</li>
+            : <li>The reporter&apos;s price pays for the visit. Your Groundproof plan or check-ins pay for the checks that prove it happened.</li>}
           <li>Sending your own relative or builder instead? Then you only pay Groundproof, as normal.</li>
         </ul>
       </div>
