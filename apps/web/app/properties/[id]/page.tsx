@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
+import { ProgressView, type ProgressShot } from "@/components/ProgressView";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -48,8 +49,16 @@ export default async function PropertyPage({
   const today = new Date().toISOString().slice(0, 10);
   const viewerMsg = searchParams.viewer;
 
+  // The anchor visit may be older than the 50 most recent check-ins.
+  let anchorCheckin = (checkins as Checkin[] | null)?.find((c) => c.is_anchor && c.verdict === "verified") ?? null;
+  if (!anchorCheckin && property.anchored_at) {
+    const { data } = await supabase.from("checkins").select("*").eq("property_id", property.id)
+      .eq("is_anchor", true).eq("verdict", "verified").order("server_time").limit(1).maybeSingle<Checkin>();
+    anchorCheckin = data ?? null;
+  }
+
   // Signed URLs for photos (private bucket), one batch call
-  const paths = (checkins ?? []).flatMap((c: Checkin) => c.photo_paths);
+  const paths = [...(checkins ?? []).flatMap((c: Checkin) => c.photo_paths), ...(anchorCheckin?.photo_paths.slice(0, 1) ?? [])];
   const urls = new Map<string, string>();
   if (paths.length) {
     const { data: signed } = await supabase.storage.from("checkins").createSignedUrls(paths, 60 * 60);
@@ -58,6 +67,25 @@ export default async function PropertyPage({
 
   const ms = (milestones ?? []) as Milestone[];
   const msName = new Map(ms.map((m) => [m.id, m.name]));
+
+  // Progress: the front photo (photo 1) of the anchor and of each verified check-in.
+  const shot = (c: Checkin): ProgressShot | null => {
+    const url = urls.get(c.photo_paths[0]);
+    if (!url) return null;
+    const label = c.is_anchor ? "Anchor visit" : c.milestone_id ? msName.get(c.milestone_id) ?? "Stage" : "Routine check-in";
+    return { id: c.id, url, date: c.taken_offline ? c.device_time : c.server_time, label };
+  };
+  const anchorShot = anchorCheckin ? shot(anchorCheckin) : null;
+  const laterShots = ((checkins ?? []) as Checkin[])
+    .filter((c) => !c.is_anchor && c.verdict === "verified")
+    .map(shot).filter((x): x is ProgressShot => !!x);
+  // Timeline: latest verified photo in each month, oldest first, anchor included.
+  const byMonth = new Map<string, ProgressShot>();
+  for (const x of [...laterShots, ...(anchorShot ? [anchorShot] : [])]) {
+    const key = x.date.slice(0, 7);
+    if (!byMonth.has(key)) byMonth.set(key, x);
+  }
+  const timeline = [...byMonth.values()].sort((a, b) => a.date.localeCompare(b.date));
   const invite = invites?.[0];
   const inviteLive = invite && !invite.used_at && new Date(invite.expires_at) > new Date();
   const admin = property.nipost_address?.administrative;
@@ -99,6 +127,8 @@ export default async function PropertyPage({
 
       <div className="two-col">
         <section aria-labelledby="log">
+          {anchorShot && <ProgressView anchor={anchorShot} later={laterShots} timeline={timeline} />}
+
           <h2 id="log">Check-ins</h2>
           {openRequest && (
             <p className="notice">

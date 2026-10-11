@@ -135,6 +135,7 @@ input:focus { border-color: var(--ink); }
 .row-link { display: grid; grid-template-columns: 1fr auto; gap: 0.3rem 1.5rem; align-items: center; padding: 1.1rem 0.25rem; text-decoration: none; }
 .row-link:hover { background: #e9ece7; }
 .two-col { display: grid; grid-template-columns: 1fr 320px; gap: 3rem; align-items: start; }
+.two-col > * { min-width: 0; }
 .panel { border: 1px solid var(--concrete); background: var(--surface); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0; }
 .facts dt { color: var(--ink-soft); }
@@ -305,6 +306,23 @@ input:focus { border-color: var(--ink); }
 /* ---------- check-in requests ---------- */
 .request-box { padding: 0.9rem; margin: 0 0 1.1rem; background: var(--paper); border-left: 4px solid var(--plate); }
 .request-box form { margin: 0; }
+
+/* ---------- progress view ---------- */
+.progress { margin-bottom: 2.5rem; }
+.compare { position: relative; aspect-ratio: 3 / 4; max-width: 520px; overflow: hidden; border-radius: var(--radius); background: var(--ink); user-select: none; }
+.compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.compare-before { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+.compare-line { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 3px; margin-left: -1.5px; background: var(--plate); box-shadow: 0 0 0 1px rgba(16,37,31,0.4); pointer-events: none; }
+.compare-line::after { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; background: var(--plate); border: 3px solid var(--ink); }
+.compare-tag { position: absolute; top: 0.6rem; padding: 0.2rem 0.5rem; font-size: 0.8rem; font-weight: 700; background: rgba(16,37,31,0.85); color: #fff; border-radius: 3px; pointer-events: none; }
+.compare-tag.left { left: 0.6rem; }
+.compare-tag.right { right: 0.6rem; }
+.compare input[type="range"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.compare:focus-within { outline: 3px solid var(--plate); outline-offset: 3px; }
+.strip { list-style: none; padding: 0 0 0.5rem; margin: 0.5rem 0 0; display: flex; gap: 0.75rem; overflow-x: auto; scroll-snap-type: x mandatory; }
+.strip li { flex: 0 0 132px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 0.2rem; }
+.strip img { width: 132px; height: 176px; object-fit: cover; border-radius: var(--radius); display: block; }
+@media print { .progress { display: none; } }
 
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
