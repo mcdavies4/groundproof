@@ -41,7 +41,26 @@ async function createMatch(form: FormData) {
   const body: Record<string, unknown> = { action: "create_match" };
   form.forEach((v, k) => { body[k] = typeof v === "string" ? v : ""; });
   const r = await adminAction(body);
-  redirect(`/admin?notice=${encodeURIComponent(r.ok ? "ok:Introduced. Both have the agreement by email." : `error:${r.error}`)}`);
+  const d = r.data as { invited?: string } | undefined;
+  redirect(`/admin?notice=${encodeURIComponent(!r.ok ? `error:${r.error}`
+    : d?.invited === "sent" ? "ok:Introduced. Both have the agreement, and the reporter has their invite code."
+    : "ok:Introduced. Both have the agreement. Link the property once the owner adds it.")}`);
+}
+async function reviewApplication(id: string, decision: "approved" | "declined") {
+  "use server";
+  await adminAction({ action: "review_application", id, decision });
+  redirect(`/admin?notice=${encodeURIComponent(decision === "approved" ? "ok:Approved. They've been emailed the app link and next steps." : "ok:Declined, with a polite email.")}`);
+}
+async function linkMatch(form: FormData) {
+  "use server";
+  const r = await adminAction({ action: "link_match_property", match_id: form.get("match_id"), property_id: form.get("property_id") });
+  const invited = (r.data as { invited?: string } | undefined)?.invited;
+  redirect(`/admin?notice=${encodeURIComponent(!r.ok ? `error:${r.error}` : invited === "already" ? "ok:Linked. The reporter was already on that property." : "ok:Linked. The reporter has been emailed their invite code.")}`);
+}
+async function closeRequest(id: string) {
+  "use server";
+  await adminAction({ action: "close_request", id });
+  revalidatePath("/admin");
 }
 async function endMatch(id: string) {
   "use server";
@@ -64,6 +83,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { noti
     <AdminView
       s={s} approve={approveDeveloper} suspend={suspendReporter} notice={searchParams.notice}
       pricing={{ setBand, deleteBand, createMatch, endMatch }}
+      todo={{ introduce: createMatch, review: reviewApplication, link: linkMatch, close: closeRequest }}
     />
   );
 }

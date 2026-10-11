@@ -15,7 +15,9 @@ export default async function Account() {
   // Reporters (anyone on the ground for at least one property) get a public profile.
   const { count: reporting } = await supabase.from("property_members")
     .select("property_id", { count: "exact", head: true }).eq("user_id", user.id).eq("role", "reporter");
-  const isReporter = (reporting ?? 0) > 0;
+  // A reporter on a property, or an applicant Groundproof has approved.
+  const { data: canReport } = await supabase.rpc("is_any_reporter");
+  const isReporter = (reporting ?? 0) > 0 || canReport === true;
   const { data: prefs } = await supabase.from("email_prefs").select("tips, digest").eq("user_id", user.id).maybeSingle();
   const [{ data: profile }, { data: record }] = isReporter
     ? await Promise.all([
@@ -29,6 +31,15 @@ export default async function Account() {
         supabase.from("reporter_rates").select("visit_type, price_ngn").eq("user_id", user.id),
       ])
     : [{ data: [] }, { data: [] }];
+  const { data: application } = isReporter && !profile
+    ? await supabase.rpc("my_reporter_application").maybeSingle<{ name: string; state: string; areas: string }>()
+    : { data: null };
+  const steps = [
+    { done: (reporting ?? 0) > 0, label: <>Install the <a href="https://play.google.com/store/apps/details?id=ng.the36th.groundproof">Groundproof app</a> and sign in with {user.email}</> },
+    { done: Boolean(profile), label: <>Set up your profile below</> },
+    { done: Boolean(profile?.agreed_rules_at), label: <>Agree to the reporter rules</> },
+    { done: Object.keys(Object.fromEntries((myRates ?? []).map((r: { visit_type: string }) => [r.visit_type, 1]))).length > 0, label: <>Set your prices per visit</> },
+  ];
   const rateMap = Object.fromEntries(((myRates ?? []) as { visit_type: VisitType; price_ngn: number }[]).map((r) => [r.visit_type, r.price_ngn]));
 
   return (
@@ -47,7 +58,12 @@ export default async function Account() {
           {profile?.is_public && (
             <p className="small">Your public page: <Link href={`/reporters/${profile.slug}`}>groundproof.site/reporters/{profile.slug}</Link></p>
           )}
-          <ReporterProfileForm profile={profile} />
+          {steps.some((x) => !x.done) && (
+            <ol className="steps-check">
+              {steps.map((x, i) => <li key={i} className={x.done ? "done" : ""}>{x.label}</li>)}
+            </ol>
+          )}
+          <ReporterProfileForm profile={profile} suggest={application} />
           {profile?.suspended && <p className="notice error">Your profile is paused. Reply to any Groundproof email to talk to us.</p>}
           {profile && !profile.agreed_rules_at && (
             <div style={{ marginTop: "2rem" }}>

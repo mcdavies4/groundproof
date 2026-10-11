@@ -5,6 +5,52 @@ import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
+const PLAY = "https://play.google.com/store/apps/details?id=ng.the36th.groundproof";
+
+type Db = ReturnType<typeof adminClient>;
+
+async function userIdByEmail(db: Db, email: string): Promise<string | null> {
+  const want = email.trim().toLowerCase();
+  for (let page = 1; page <= 10; page++) {
+    const { data } = await db.auth.admin.listUsers({ page, perPage: 1000 });
+    const hit = data?.users.find((u) => u.email?.toLowerCase() === want);
+    if (hit) return hit.id;
+    if (!data || data.users.length < 1000) break;
+  }
+  return null;
+}
+
+async function sendMail(to: string, subject: string, inner: string, replyTo?: string) {
+  const key = Deno.env.get("RESEND_API_KEY"), from = Deno.env.get("ALERT_FROM");
+  if (!key || !from) return false;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from, to: [to], subject, ...(replyTo ? { reply_to: replyTo } : {}),
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;color:#10251f;max-width:540px;margin:0 auto;padding:24px;font-size:16px;line-height:1.5"><p style="margin:0 0 6px;font-size:14px;color:#3d5149">Groundproof</p>${inner}</div>`,
+    }),
+  }).catch(() => null);
+  return Boolean(res?.ok);
+}
+
+/** Put a matched reporter on a property: an invite code, emailed straight to them. */
+async function inviteReporter(db: Db, propertyId: string, reporterId: string) {
+  const { data: already } = await db.from("property_members").select("role").eq("property_id", propertyId).eq("user_id", reporterId).maybeSingle();
+  if (already) return "already";
+  const { data: prop } = await db.from("properties").select("label, owner_id, kind").eq("id", propertyId).maybeSingle();
+  if (!prop) return "missing";
+  const { data: inv } = await db.from("invites").insert({ property_id: propertyId, created_by: prop.owner_id }).select("code, expires_at").single();
+  const { data: ru } = await db.auth.admin.getUserById(reporterId);
+  if (!inv || !ru.user?.email) return "failed";
+  const what = prop.kind === "plot" ? "walk the beacons of" : "check in at";
+  await sendMail(ru.user.email, `Your invite code for ${prop.label}`, `<h1 style="margin:0 0 14px;font-size:22px">You're on ${esc(prop.label)}</h1>
+<p style="margin:0 0 14px">Open the Groundproof app, sign in with this email address, and enter this code under <b>Join a property</b>:</p>
+<p style="margin:0 0 18px;font-size:30px;font-weight:bold;letter-spacing:4px;background:#f4c531;display:inline-block;padding:10px 18px;border:3px solid #10251f;border-radius:6px">${esc(inv.code)}</p>
+<p style="margin:0 0 14px">Then go to the property and ${what} it from the app. Your first visit there sets it up.</p>
+<p style="margin:0"><a href="${PLAY}">Get the Groundproof app</a> (Android). The code works until ${new Date(inv.expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.</p>`);
+  return "sent";
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -39,6 +85,35 @@ Deno.serve(async (req) => {
     await db.from("reporter_profiles").update({ suspended: body.suspended === true }).eq("user_id", body.user_id);
     return json({ ok: true });
   }
+  if (body.action === "link_match_property" && body.match_id && body.property_id) {
+    const { data: m } = await db.from("matches").select("owner_email, reporter_id").eq("id", String(body.match_id)).maybeSingle();
+    const { data: prop } = await db.from("properties").select("label, owner_id").eq("id", String(body.property_id)).maybeSingle();
+    const { data: ou } = prop ? await db.auth.admin.getUserById(prop.owner_id) : { data: { user: null } };
+    if (!m || !prop || ou.user?.email?.toLowerCase() !== m.owner_email) return json({ error: "That property doesn't belong to this owner." }, 400);
+    await db.from("matches").update({ property_id: String(body.property_id) }).eq("id", String(body.match_id));
+    const invited = await inviteReporter(db, String(body.property_id), m.reporter_id);
+    return json({ ok: true, invited });
+  }
+  if (body.action === "review_application" && body.id && (body.decision === "approved" || body.decision === "declined")) {
+    const { data: app } = await db.from("reporter_applications").update({ status: body.decision }).eq("id", String(body.id)).select("name, email, state").maybeSingle();
+    if (!app) return json({ error: "Application not found." }, 404);
+    if (body.decision === "approved") {
+      await sendMail(app.email, "You're approved as a Groundproof reporter", `<h1 style="margin:0 0 14px;font-size:22px">Welcome, ${esc(app.name.split(" ")[0])}</h1>
+<p style="margin:0 0 14px">You're approved to do Groundproof visits in ${esc(app.state)}. Three quick steps:</p>
+<ol style="margin:0 0 18px;padding-left:20px">
+<li style="margin-bottom:8px"><a href="${PLAY}">Install the Groundproof app</a> (Android) and sign in with this email address.</li>
+<li style="margin-bottom:8px">On a computer or phone browser, go to <a href="${SITE}/account">${SITE}/account</a>, sign in with the same email, and set up your reporter profile. We've filled in what you told us.</li>
+<li>Agree to the reporter rules and set your prices per visit.</li></ol>
+<p style="margin:0">When an owner near you needs someone, we'll introduce you, and your invite code arrives by email.</p>`);
+    } else {
+      await sendMail(app.email, "Your Groundproof application", `<p style="margin:0 0 14px">Hi ${esc(app.name.split(" ")[0])}, thank you for applying to be a Groundproof reporter. We're not taking on more reporters in your area right now. We'll keep your details and get in touch if that changes.</p>`);
+    }
+    return json({ ok: true });
+  }
+  if (body.action === "close_request" && body.id) {
+    await db.from("ground_requests").update({ status: "closed" }).eq("id", String(body.id));
+    return json({ ok: true });
+  }
   if (body.action === "end_match" && body.match_id) {
     await db.from("matches").update({ status: "ended", ended_at: new Date().toISOString() }).eq("id", String(body.match_id));
     return json({ ok: true });
@@ -63,6 +138,15 @@ Deno.serve(async (req) => {
       return json({ error: `In ${prof.state} a ${VISIT[visitType].toLowerCase()} is ${ngn(band.min_ngn)} to ${ngn(band.max_ngn)}.` }, 400);
     }
     let propertyLabel: string | null = null;
+    let linkedId = propertyId;
+    if (!linkedId) {
+      // Owner already has exactly one property? Link it, so there's nothing for them to do.
+      const ownerId = await userIdByEmail(db, ownerEmail);
+      if (ownerId) {
+        const { data: own } = await db.from("properties").select("id, label").eq("owner_id", ownerId).is("estate_id", null);
+        if (own?.length === 1) { linkedId = own[0].id; propertyLabel = own[0].label; }
+      }
+    }
     if (propertyId) {
       const { data: prop } = await db.from("properties").select("label, owner_id").eq("id", propertyId).maybeSingle();
       const { data: ou } = prop ? await db.auth.admin.getUserById(prop.owner_id) : { data: { user: null } };
@@ -71,10 +155,11 @@ Deno.serve(async (req) => {
     }
     const { data: m, error } = await db.from("matches").insert({
       request_id: requestId, owner_name: ownerName, owner_email: ownerEmail, reporter_id: reporterId,
-      property_id: propertyId, visit_type: visitType, price_ngn: price, frequency, notes,
+      property_id: linkedId, visit_type: visitType, price_ngn: price, frequency, notes,
     }).select("id").single();
     if (error || !m) return json({ error: error?.message ?? "Couldn't save the match." }, 500);
     if (requestId) await db.from("ground_requests").update({ status: "matched" }).eq("id", requestId);
+    const invited = linkedId ? await inviteReporter(db, linkedId, reporterId) : null;
 
     // The written agreement, to both sides.
     const { data: ru } = await db.auth.admin.getUserById(reporterId);
@@ -106,10 +191,12 @@ Deno.serve(async (req) => {
       }),
     }).catch((e) => console.error(e)) : Promise.resolve();
     await Promise.all([
-      mail(ownerEmail, `${esc(ownerName)}, we've matched you with <b>${esc(prof.display_name)}</b>, a Groundproof reporter in ${esc(prof.state)}. Here's what you've agreed. ${propertyLabel ? "" : `Next: send ${esc(prof.display_name.split(" ")[0])} your property's invite code from its page on Groundproof.`}`),
-      reporterEmail ? mail(reporterEmail, `You've been matched with <b>${esc(ownerName)}</b>. Here's what you've agreed. ${propertyLabel ? "Check in from the Groundproof app at the property." : "They'll send you an invite code for their property."}`) : Promise.resolve(),
+      mail(ownerEmail, `${esc(ownerName)}, we've matched you with <b>${esc(prof.display_name)}</b>, a Groundproof reporter in ${esc(prof.state)}. Here's what you've agreed. ${invited === "sent" || invited === "already"
+        ? `We've given ${esc(prof.display_name.split(" ")[0])} access to ${esc(propertyLabel ?? "your property")}, so there's nothing else for you to do. You'll get an email after each visit.`
+        : `Next: <a href="${SITE}/properties/new">add your property on Groundproof</a> (sign in with this email). We'll link it and send ${esc(prof.display_name.split(" ")[0])} the invite code.`}`),
+      reporterEmail ? mail(reporterEmail, `You've been matched with <b>${esc(ownerName)}</b>. Here's what you've agreed. ${invited === "sent" ? "Your invite code is in a separate email." : invited === "already" ? "You're already on the property: check in from the app." : "We'll email you the invite code as soon as the property is set up."}`) : Promise.resolve(),
     ]);
-    return json({ ok: true, id: m.id });
+    return json({ ok: true, id: m.id, linked: Boolean(linkedId), invited });
   }
   if (body.action === "approve_developer" && body.user_id) {
     const { data: dev } = await db.from("developers").update({ approved: true }).eq("user_id", body.user_id).select("company").maybeSingle();
@@ -149,6 +236,8 @@ Deno.serve(async (req) => {
     db.from("matches").select("id, owner_name, owner_email, reporter_id, property_id, visit_type, price_ngn, frequency, status, created_at").order("created_at", { ascending: false }).limit(100),
     db.from("reporter_rates").select("user_id, visit_type, price_ngn"),
   ]);
+  const { data: staleReqs } = await db.from("checkin_requests").select("property_id, created_at")
+    .is("fulfilled_at", null).is("cancelled_at", null).lt("created_at", new Date(Date.now() - 3 * DAY).toISOString());
 
   // Emails for owners and reporters
   const emails = new Map<string, string>();
@@ -198,6 +287,7 @@ Deno.serve(async (req) => {
         email: emails.get(uid) ?? "(deleted)",
         name: prof?.display_name ?? null, slug: prof?.is_public ? prof.slug : null,
         where: prof ? `${prof.areas}, ${prof.state}` : null,
+        state: prof?.state ?? null,
         visits: mine.length,
         verified: mine.filter((c) => c.verdict === "verified").length,
         flagged: mine.filter((c) => c.verdict === "flagged").length,
@@ -212,6 +302,18 @@ Deno.serve(async (req) => {
       units: P.filter((p) => p.owner_id === d.user_id && (p as { estate_id?: string | null }).estate_id).length,
     })),
     bands: bands ?? [],
+    // Each owner's own properties (not estate units), for linking matches.
+    ownerProperties: (() => {
+      const wanted = new Set([...(matches ?? []).map((m) => m.owner_email), ...(groundRequests ?? []).map((g) => g.email.toLowerCase())]);
+      const out: Record<string, { id: string; label: string }[]> = {};
+      for (const p of P) {
+        const e = emails.get(p.owner_id)?.toLowerCase();
+        if (!e || !wanted.has(e) || (p as { estate_id?: string | null }).estate_id) continue;
+        (out[e] ??= []).push({ id: p.id, label: p.label });
+      }
+      return out;
+    })(),
+    staleRequests: (staleReqs ?? []).map((r) => ({ property: P.find((p) => p.id === r.property_id)?.label ?? "?", propertyId: r.property_id, since: r.created_at })),
     matches: (matches ?? []).map((m) => ({
       ...m,
       reporter: (profiles ?? []).find((p) => p.user_id === m.reporter_id)?.display_name ?? emails.get(m.reporter_id) ?? "(deleted)",

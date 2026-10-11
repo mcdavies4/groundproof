@@ -2,6 +2,7 @@ import Link from "next/link";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Verdict } from "@/lib/types";
 import { AdminPricing, type Band, type Match, type PricingActions } from "./AdminPricing";
+import { AdminTodo, type TodoActions } from "./AdminTodo";
 
 export interface Stats {
   generatedAt: string;
@@ -26,8 +27,10 @@ export interface Stats {
   waitlist: { email: string; plan: string | null; created_at: string }[];
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
   bands?: Band[];
+  ownerProperties?: Record<string, { id: string; label: string }[]>;
+  staleRequests?: { property: string; propertyId: string; since: string }[];
   matches?: Match[];
-  reporters?: { id: string; suspended: boolean; hasProfile: boolean; agreedRules: boolean; rates: Record<string, number>; email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
+  reporters?: { id: string; state: string | null; suspended: boolean; hasProfile: boolean; agreedRules: boolean; rates: Record<string, number>; email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
   groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string }[];
   reporterApplications?: { id: string; name: string; email: string; phone: string; state: string; areas: string; occupation: string; android: boolean; notes: string | null; status: string; created_at: string }[];
 }
@@ -36,8 +39,8 @@ const naira = new Intl.NumberFormat("en-GB", { style: "currency", currency: "NGN
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "–");
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export function AdminView({ s, approve, pricing, suspend, notice }: {
-  s: Stats; approve?: (userId: string) => Promise<void>; pricing?: PricingActions;
+export function AdminView({ s, approve, pricing, suspend, notice, todo }: {
+  s: Stats; approve?: (userId: string) => Promise<void>; pricing?: PricingActions; todo?: TodoActions;
   suspend?: (userId: string, on: boolean) => Promise<void>; notice?: string;
 }) {
   const t = s.totals;
@@ -50,6 +53,9 @@ export function AdminView({ s, approve, pricing, suspend, notice }: {
         <h1>Pilot dashboard</h1>
         <p className="small muted">Updated {when(s.generatedAt)}. Refresh the page for the latest.</p>
       </div>
+
+      {notice && !pricing && <p className="notice">{notice.replace(/^(error|ok):/, "")}</p>}
+      {todo && <AdminTodo s={s} actions={todo} />}
 
       <section className="admin-tiles" aria-label="Totals">
         <Tile n={t.properties} label="Properties" sub={`${t.anchored} anchored`} />
@@ -153,7 +159,7 @@ export function AdminView({ s, approve, pricing, suspend, notice }: {
       </section>
 
       <section className="panel admin-table">
-        <h2>Developers</h2>
+        <h2 id="developers">Developers</h2>
         <div className="scroll-x">
           <table className="sides">
             <thead><tr><th>Company</th><th>Contact</th><th>Estates</th><th>Units</th><th>Status</th></tr></thead>

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Property, Verdict } from "@/lib/types";
+import { GettingStarted } from "@/components/GettingStarted";
 
 export default async function Dashboard() {
   const { supabase, user } = await requireUser();
@@ -33,6 +34,17 @@ export default async function Dashboard() {
     for (const c of checkins ?? []) if (!latest.has(c.property_id)) latest.set(c.property_id, c);
   }
 
+  // Getting started: the newest building that hasn't had its first real check-in yet.
+  const newest = ((properties ?? []) as Property[]).find((p) => p.kind !== "plot");
+  let gs: { hasReporter: boolean; hasCheckin: boolean } | null = null;
+  if (newest) {
+    const [{ count: reps }, { count: visits }] = await Promise.all([
+      supabase.from("property_members").select("user_id", { count: "exact", head: true }).eq("property_id", newest.id).eq("role", "reporter"),
+      supabase.from("checkins").select("id", { count: "exact", head: true }).eq("property_id", newest.id).eq("is_anchor", false).neq("verdict", "pending"),
+    ]);
+    gs = { hasReporter: (reps ?? 0) > 0, hasCheckin: (visits ?? 0) > 0 };
+  }
+
   return (
     <main className="wrap page">
       <div className="page-head">
@@ -43,6 +55,10 @@ export default async function Dashboard() {
           <Link className="btn" href="/properties/new">Add a property</Link>
         </div>
       </div>
+
+      {newest && gs && (
+        <GettingStarted property={newest} hasReporter={gs.hasReporter} anchored={Boolean(newest.anchored_at)} hasCheckin={gs.hasCheckin} />
+      )}
 
       {(properties ?? []).length === 0 && (shared ?? []).length > 0 ? (
         <p className="muted">You don&apos;t have your own properties yet. <Link href="/properties/new">Add one</Link> any time.</p>

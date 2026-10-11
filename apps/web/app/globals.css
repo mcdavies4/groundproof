@@ -384,6 +384,25 @@ label.radio input { width: 22px; height: 22px; accent-color: var(--ink); }
 .band-form label { font-size: 0.85rem; }
 @media (max-width: 700px) { .band-form { grid-template-columns: 1fr 1fr; } }
 
+/* ---------- admin to-do ---------- */
+.todo { border-left: 5px solid var(--plate); }
+.todo h2 { display: flex; align-items: center; gap: 0.6rem; }
+.todo-count { background: var(--ink); color: var(--plate); font-size: 0.95rem; padding: 0.15rem 0.6rem; border-radius: 999px; }
+.todo-group { margin-top: 1.25rem; }
+.todo-group h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.todo-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; padding: 0.7rem 0; border-top: 1px solid var(--concrete); }
+.todo-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.todo-actions form { margin: 0; }
+.small-btn { min-height: 38px; padding: 0.35rem 0.9rem; font-size: 0.9rem; }
+.steps-check { list-style: none; padding: 0; margin: 1rem 0 1.5rem; counter-reset: step; }
+.steps-check li { position: relative; padding: 0.45rem 0 0.45rem 2.3rem; counter-increment: step; }
+.steps-check li::before { content: counter(step); position: absolute; left: 0; top: 0.35rem; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; font-weight: 800; font-size: 0.85rem; }
+.steps-check li.done { color: var(--ink-soft); text-decoration: line-through; }
+.steps-check li.done::before { content: "✓"; background: var(--verified); border-color: var(--verified); color: #fff; }
+
+.getting-started { border-left: 5px solid var(--plate); margin-bottom: 2rem; }
+.getting-started h2 { margin-top: 0; font-size: 1.3rem; }
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }
