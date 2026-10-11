@@ -3,7 +3,7 @@
     "name": "Groundproof",
     "slug": "groundproof-reporter",
     "scheme": "groundproof",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -20,7 +20,8 @@
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
@@ -51,6 +52,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Groundproof records where each check-in photo is taken so the owner can confirm it was at the property."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#10251f"
         }
       ]
     ]

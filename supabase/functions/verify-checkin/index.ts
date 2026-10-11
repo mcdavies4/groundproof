@@ -8,6 +8,9 @@
 // 3. Compass: at least one photo should face roughly the way the anchor's front photo did.
 // 4. Photos: Claude compares the photos with the anchor photos and writes a progress note.
 // Location decides verified/flagged; compass and photos can only downgrade "verified" to "review".
+// Offline check-ins: photos taken with no signal wait on the phone and upload later. They're
+// accepted up to MAX_OFFLINE_MS after they were taken, and labelled "taken offline".
+// A non-flagged check-in also answers the property's open check-in request, if there is one.
 import { cors, json } from "../_shared/cors.ts";
 import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { nipost, NipostError, type ReverseData } from "../_shared/nipost.ts";
@@ -19,6 +22,8 @@ const VERIFIED_DISTANCE_M = 25;
 const REVIEW_DISTANCE_M = 60;
 const MAX_ACCURACY_M = 20;
 const MAX_CLOCK_DRIFT_MS = 10 * 60 * 1000;
+const OFFLINE_AFTER_MS = 10 * 60 * 1000;          // waited longer than this on the phone = offline check-in
+const MAX_OFFLINE_MS = 72 * 60 * 60 * 1000;       // older than this can't be verified, only reviewed
 const HEADING_TOLERANCE_DEG = 45;
 
 // Testing switches (Supabase secrets). Leave both unset in production.
@@ -77,12 +82,20 @@ Deno.serve(async (req) => {
   }
   let unit: Unit | null = rev.data.found ? rev.data.unit ?? null : null;
 
-  const drift = Math.abs(new Date(c.server_time).getTime() - new Date(c.device_time).getTime());
-  const goodSignal = c.gps_accuracy_m <= MAX_ACCURACY_M && drift <= MAX_CLOCK_DRIFT_MS;
+  // Timing. Older app versions don't send uploaded_device_time; they upload straight away.
+  const takenMs = new Date(c.device_time).getTime();
+  const uploadMs = c.uploaded_device_time ? new Date(c.uploaded_device_time).getTime() : takenMs;
+  const drift = Math.abs(new Date(c.server_time).getTime() - uploadMs);   // phone clock vs ours, at upload
+  const waited = uploadMs - takenMs;                                     // time spent queued on the phone
+  const takenOffline = Boolean(c.uploaded_device_time) && waited > OFFLINE_AFTER_MS;
+  const tooLate = waited > MAX_OFFLINE_MS;
+  const timeTravel = waited < -2 * 60 * 1000;                             // photo "taken" after it was uploaded
+  const goodSignal = c.gps_accuracy_m <= MAX_ACCURACY_M && drift <= MAX_CLOCK_DRIFT_MS && !tooLate && !timeTravel;
   const signalWhy = () => {
     const why: string[] = [];
     if (c.gps_accuracy_m > MAX_ACCURACY_M) why.push(`GPS accuracy ±${Math.round(c.gps_accuracy_m)}m`);
-    if (drift > MAX_CLOCK_DRIFT_MS) why.push("phone clock out of sync");
+    if (drift > MAX_CLOCK_DRIFT_MS || timeTravel) why.push("phone clock out of sync");
+    if (tooLate) why.push(`uploaded ${Math.round(waited / 86_400_000)} days after the photos were taken`);
     return why;
   };
 
@@ -199,6 +212,15 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (takenOffline) {
+    const at = new Date(takenMs).toLocaleString("en-GB", {
+      timeZone: "Africa/Lagos", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+    const hours = waited / 3_600_000;
+    const later = hours < 1 ? `${Math.max(1, Math.round(waited / 60_000))} minutes` : `${Math.round(hours)} hour${Math.round(hours) === 1 ? "" : "s"}`;
+    reasons.push(`Taken with no signal on ${at} (Lagos time), uploaded ${later} later.`);
+  }
+
   const reason = reasons.join(" ");
   const now = new Date().toISOString();
   const finalUnit = unit as Unit | null;
@@ -215,7 +237,19 @@ Deno.serve(async (req) => {
     heading_ok: headingOk,
     photo_match: photo.match,
     photo_note: photo.note,
+    taken_offline: takenOffline,
   }).eq("id", c.id);
+
+  // Answer the open check-in request, if this visit came after it was made.
+  let answersRequest = false;
+  if (verdict! !== "flagged") {
+    const { data: answered } = await db.from("checkin_requests")
+      .update({ fulfilled_checkin_id: c.id, fulfilled_at: now })
+      .eq("property_id", property.id).is("fulfilled_at", null).is("cancelled_at", null)
+      .lte("created_at", new Date(takenMs + OFFLINE_AFTER_MS).toISOString())
+      .select("id");
+    answersRequest = (answered ?? []).length > 0;
+  }
 
   if (verdict! === "verified" && c.is_anchor && !property.anchored_at) {
     await db.from("properties").update({
@@ -242,7 +276,7 @@ Deno.serve(async (req) => {
   }
   await alertOwner(db, {
     ownerId: property.owner_id, propertyId: property.id, propertyLabel: property.label,
-    verdict: verdict!, reason, note: photo.note, isAnchor: c.is_anchor, matchType: matchType!, stageName,
+    verdict: verdict!, reason, note: photo.note, isAnchor: c.is_anchor, matchType: matchType!, stageName, answersRequest,
   });
 
   return json({ verdict: verdict!, reason, note: photo.note, match_type: matchType!, mock: rev.mock });

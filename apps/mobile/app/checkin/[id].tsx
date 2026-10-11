@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
-import { File } from "expo-file-system";
 import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
@@ -10,6 +9,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { c, s } from "@/lib/theme";
 import { Button, Plate, verdictColour, verdictLabel } from "@/lib/ui";
+import { readCache, writeCache } from "@/lib/cache";
+import { enqueue, sendNow, stashPhotos, discard } from "@/lib/queue";
 
 const MAX_PHOTOS = 4;
 const ANCHOR_PHOTOS = 4;
@@ -40,7 +41,10 @@ async function readHeading(): Promise<number | null> {
     return null;
   }
 }
-type Result = { verdict: keyof typeof verdictLabel; reason: string; note?: string | null; match_type?: "postcode" | "coordinates" };
+type Result = {
+  verdict: keyof typeof verdictLabel; reason: string; note?: string | null; match_type?: "postcode" | "coordinates";
+  saved?: boolean;   // kept on the phone for later upload
+};
 type Find =
   | { status: "idle" | "searching" }
   | { status: "found"; postcode: string; distance_m: number }
@@ -51,6 +55,7 @@ type Find =
 export default function CheckIn() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [property, setProperty] = useState<Property | null>(null);
+  const [offline, setOffline] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [milestoneId, setMilestoneId] = useState<string | null>(null);
   const [camPerm, requestCam] = useCameraPermissions();
@@ -75,15 +80,28 @@ export default function CheckIn() {
     let watcher: Location.LocationSubscription | null = null;
     let cancelled = false;
     (async () => {
-      const [{ data: p }, { data: m }] = await Promise.all([
+      const [{ data: p, error: pErr }, { data: m }] = await Promise.all([
         supabase.from("properties").select("id, label, postcode, anchored_at").eq("id", id).single(),
         supabase.from("milestones").select("id, name, completed_checkin_id").eq("property_id", id).order("sort"),
       ]);
-      setProperty(p as Property);
-      setMilestones((m ?? []) as Milestone[]);
-      if (p?.anchored_at) {
-        const { data: reason } = await supabase.rpc("checkin_block_reason", { pid: id });
-        if (!cancelled) setBlocked((reason as string | null) ?? null);
+      if (pErr || !p) {
+        // No signal: use the copy saved last time this screen loaded, or the property list's copy.
+        const saved = await readCache<{ property: Property; milestones: Milestone[] }>(`property.${id}`);
+        const list = await readCache<{ rows: Property[] }>("properties");
+        const fallback = saved?.property ?? list?.rows.find((r) => r.id === id) ?? null;
+        if (cancelled) return;
+        setOffline(true);
+        setProperty(fallback);
+        setMilestones(saved?.milestones ?? []);
+        if (!fallback) setError("No signal, and this property hasn't been opened on this phone before. Try again when you're online.");
+      } else {
+        setProperty(p as Property);
+        setMilestones((m ?? []) as Milestone[]);
+        writeCache(`property.${id}`, { property: p, milestones: m ?? [] });
+        if (p.anchored_at) {
+          const { data: reason } = await supabase.rpc("checkin_block_reason", { pid: id });
+          if (!cancelled) setBlocked((reason as string | null) ?? null);
+        }
       }
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocPerm(status === "granted");
@@ -138,7 +156,11 @@ export default function CheckIn() {
       const { data, error: fnErr } = await supabase.functions.invoke("find-postcode", {
         body: { property_id: property.id, lat: loc.coords.latitude, lng: loc.coords.longitude, accuracy: loc.coords.accuracy ?? 999 },
       });
-      if (fnErr || !data?.status) throw new Error("NIPOST didn't answer. Try again in a minute.");
+      if (fnErr || !data?.status) {
+        throw new Error(offline
+          ? "Finding the postcode needs signal. Move to where you have signal, or come back to this step later. Everything after it works offline."
+          : "NIPOST didn't answer. Try again in a minute.");
+      }
       setFind(data as Find);
     } catch (e) {
       setFind({ status: "error", error: (e as Error).message });
@@ -148,49 +170,60 @@ export default function CheckIn() {
   async function submit() {
     if (!property) return;
     setSubmitting(true); setError(null);
+    const checkinId = Crypto.randomUUID();
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const checkinId = Crypto.randomUUID();
+      // Reads the phone's saved sign-in, so it works with no signal.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("You've been signed out. Sign in again, then check in.");
 
       // Use the most accurate fix among the photos; any mocked fix taints the check-in.
       const best = [...shots].sort((a, b) => a.accuracy - b.accuracy)[0];
       const mocked = shots.some((x) => x.mocked);
 
-      const paths: string[] = [];
-      for (let i = 0; i < shots.length; i++) {
-        const bytes = await new File(shots[i].uri).arrayBuffer();
-        const path = `${property.id}/${checkinId}/${i + 1}.jpg`;
-        const { error: upErr } = await supabase.storage.from("checkins").upload(path, bytes, { contentType: "image/jpeg" });
-        if (upErr) throw new Error(`Photo upload failed: ${upErr.message}`);
-        paths.push(path);
-      }
-
-      const { error: insErr } = await supabase.from("checkins").insert({
+      // Save everything on the phone first, so nothing is lost if there's no signal.
+      const photos = stashPhotos(checkinId, shots.map((x) => x.uri));
+      await enqueue({
         id: checkinId,
-        property_id: property.id,
-        reporter_id: auth.user!.id,
-        milestone_id: isAnchor ? null : milestoneId,
-        is_anchor: isAnchor,
-        anchor_choice: isAnchor && !property.postcode ? anchorChoice : null,
-        claimed_postcode: isAnchor && !property.postcode && anchorChoice === "postcode" ? claimedPostcode : null,
-        lat: best.lat,
-        lng: best.lng,
-        gps_accuracy_m: best.accuracy,
-        is_mocked: mocked,
-        device_time: shots[0].time,
-        photo_paths: paths,
-        photo_headings: shots.map((x) => x.heading),
-        is_emulator: !Device.isDevice,
-        device_info: { brand: Device.brand, model: Device.modelName, os: `${Device.osName} ${Device.osVersion}` },
-        note: note.trim() || null,
+        propertyId: property.id,
+        propertyLabel: property.label,
+        takenAt: shots[0].time,
+        photos,
+        stage: "upload",
+        failed: null,
+        row: {
+          id: checkinId,
+          property_id: property.id,
+          reporter_id: session.user.id,
+          milestone_id: isAnchor ? null : milestoneId,
+          is_anchor: isAnchor,
+          anchor_choice: isAnchor && !property.postcode ? anchorChoice : null,
+          claimed_postcode: isAnchor && !property.postcode && anchorChoice === "postcode" ? claimedPostcode : null,
+          lat: best.lat,
+          lng: best.lng,
+          gps_accuracy_m: best.accuracy,
+          is_mocked: mocked,
+          device_time: shots[0].time,
+          photo_headings: shots.map((x) => x.heading),
+          is_emulator: !Device.isDevice,
+          device_info: { brand: Device.brand, model: Device.modelName, os: `${Device.osName} ${Device.osVersion}` },
+          note: note.trim() || null,
+        },
       });
-      if (insErr) throw new Error(insErr.message.replace(/^[A-Z_]+:\s*/, ""));
 
-      const { data, error: fnErr } = await supabase.functions.invoke("verify-checkin", { body: { checkin_id: checkinId } });
-      if (fnErr) {
-        setResult({ verdict: "pending", reason: "Saved. NIPOST didn't answer yet, so the owner will see this once it's checked." });
+      const out = await sendNow(checkinId);
+      if (out.kind === "done") {
+        setResult(out.result as Result);
+      } else if (out.kind === "waiting") {
+        setResult({
+          verdict: "pending", saved: true,
+          reason: "No signal right now. This check-in is saved on your phone and uploads by itself when you're back online. Keep Groundproof installed until it's gone from the \"Waiting to upload\" list.",
+        });
+      } else if (out.kind === "uploaded") {
+        setResult({ verdict: "pending", reason: "Uploaded. NIPOST hasn't answered yet, so the app will check again shortly. The owner sees the result as soon as it's in." });
       } else {
-        setResult(data as Result);
+        // The server refused it (for example, no check-ins left). Nothing to retry later.
+        await discard(checkinId);
+        setError(out.error);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -199,13 +232,22 @@ export default function CheckIn() {
     }
   }
 
-  if (!property) return <View style={s.screen} />;
+  if (!property) {
+    return (
+      <View style={[s.screen, s.pad, { gap: 16 }]}>
+        {error && <Text style={s.body}>{error}</Text>}
+        {error && <Button title="Back" secondary onPress={() => router.back()} />}
+      </View>
+    );
+  }
 
   if (result) {
     return (
       <View style={[s.screen, s.pad, { gap: 16 }]}>
         <Text style={[s.h1, { color: verdictColour[result.verdict] }]}>
-          {result.verdict === "verified" && result.match_type === "coordinates" ? "Location match" : verdictLabel[result.verdict]}
+          {result.saved
+            ? "Saved on your phone"
+            : result.verdict === "verified" && result.match_type === "coordinates" ? "Location match" : verdictLabel[result.verdict]}
         </Text>
         <Text style={s.body}>{result.reason}</Text>
         {result.note ? <Text style={[s.muted, { fontStyle: "italic" }]}>{result.note}</Text> : null}
@@ -298,6 +340,12 @@ export default function CheckIn() {
           <Text style={s.muted}>Anchoring to this exact spot</Text>
         )}
       </View>
+
+      {offline && (
+        <Text style={[s.muted, { borderLeftWidth: 4, borderLeftColor: c.review, paddingLeft: 10 }]}>
+          No signal. Take the photos as normal; they upload when you&apos;re back online.
+        </Text>
+      )}
 
       {isAnchor ? (
         <Text style={s.body}>

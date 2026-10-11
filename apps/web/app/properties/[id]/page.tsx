@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, createInvite, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, cancelRequest, createInvite, requestCheckin, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -17,7 +17,7 @@ export default async function PropertyPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { payment?: string; viewer?: string };
+  searchParams: { payment?: string; viewer?: string; request?: string };
 }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
@@ -26,7 +26,7 @@ export default async function PropertyPage({
   if (!property) notFound();
   const isOwner = (property as Property & { owner_id: string }).owner_id === user.id;
 
-  const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }] = await Promise.all([
+  const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }, { data: requests }, { count: reporterCount }] = await Promise.all([
     supabase.from("milestones").select("*").eq("property_id", property.id).order("sort"),
     supabase.from("checkins").select("*").eq("property_id", property.id).order("server_time", { ascending: false }).limit(50),
     isOwner
@@ -35,7 +35,17 @@ export default async function PropertyPage({
     isOwner
       ? supabase.from("viewer_invites").select("id, email, accepted_at").eq("property_id", property.id).order("created_at")
       : Promise.resolve({ data: [] as { id: string; email: string; accepted_at: string | null }[] }),
+    supabase.from("checkin_requests").select("id, note, due_by, created_at, fulfilled_at, cancelled_at")
+      .eq("property_id", property.id).order("created_at", { ascending: false }).limit(1),
+    supabase.from("property_members").select("user_id", { count: "exact", head: true })
+      .eq("property_id", property.id).eq("role", "reporter"),
   ]);
+  const lastRequest = requests?.[0] as
+    | { id: string; note: string | null; due_by: string | null; created_at: string; fulfilled_at: string | null; cancelled_at: string | null }
+    | undefined;
+  const openRequest = lastRequest && !lastRequest.fulfilled_at && !lastRequest.cancelled_at ? lastRequest : null;
+  const requestMsg = searchParams.request;
+  const today = new Date().toISOString().slice(0, 10);
   const viewerMsg = searchParams.viewer;
 
   // Signed URLs for photos (private bucket), one batch call
@@ -90,6 +100,13 @@ export default async function PropertyPage({
       <div className="two-col">
         <section aria-labelledby="log">
           <h2 id="log">Check-ins</h2>
+          {openRequest && (
+            <p className="notice">
+              Visit requested on {new Date(openRequest.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              {openRequest.due_by && <>, needed by {new Date(openRequest.due_by + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</>}.
+              {" "}Waiting for the person on the ground.
+            </p>
+          )}
           {!property.anchored_at && (
             <div className="empty" style={{ marginBottom: "1.5rem" }}>
               <h3>Waiting for the anchor visit</h3>
@@ -113,7 +130,7 @@ export default async function PropertyPage({
                     <VerdictBadge verdict={c.verdict} matchType={c.match_type} />
                   </div>
                   <div className="small muted">
-                    {when(c.server_time)}. {c.verdict_reason ?? "Waiting for NIPOST."}
+                    {when(c.taken_offline ? c.device_time : c.server_time)}. {c.verdict_reason ?? "Waiting for NIPOST."}
                     {c.nipost_mock ? " (mock)" : ""}
                   </div>
                   {c.photo_note && (
@@ -130,6 +147,7 @@ export default async function PropertyPage({
                     {c.heading_ok === true && <span>Facing the right way</span>}
                     {c.heading_ok === false && <span style={{ color: "var(--review)" }}>Facing a different way from the anchor</span>}
                     {c.is_emulator && <span style={{ color: "var(--flagged)" }}>Emulator</span>}
+                    {c.taken_offline && <span>Taken offline, uploaded later</span>}
                   </div>
                   <div className="photos">
                     {c.photo_paths.map((p) =>
@@ -219,8 +237,42 @@ export default async function PropertyPage({
           )}
 
           {isOwner && (
-            <div className="panel">
+            <div className="panel" id="ground">
               <h3>Person on the ground</h3>
+              {(reporterCount ?? 0) > 0 && (
+                <div className="request-box">
+                  {openRequest ? (
+                    <>
+                      <p className="small" style={{ margin: 0 }}>
+                        <strong>Visit requested.</strong> They&apos;ve been emailed, and the app reminds them until they check in.
+                      </p>
+                      {openRequest.note && <p className="small muted" style={{ margin: "0.4rem 0 0" }}>&ldquo;{openRequest.note}&rdquo;</p>}
+                      <form action={cancelRequest.bind(null, property.id, openRequest.id)}>
+                        <button type="submit" className="link-btn">Cancel request</button>
+                      </form>
+                    </>
+                  ) : (
+                    <form action={requestCheckin.bind(null, property.id)}>
+                      <p className="small muted" style={{ marginTop: 0 }}>
+                        Want eyes on it now? Ask for a visit. They get an email, and the app reminds them until it&apos;s done.
+                        {lastRequest?.fulfilled_at && <> Last request answered {new Date(lastRequest.fulfilled_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.</>}
+                      </p>
+                      <div className="field">
+                        <label htmlFor="req-note">What should they look at? (optional)</label>
+                        <input id="req-note" name="note" type="text" maxLength={300} placeholder="Check the roof after the storm" />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="req-due">Needed by (optional)</label>
+                        <input id="req-due" name="due_by" type="date" min={today} />
+                      </div>
+                      <button className="btn" type="submit">Request a check-in</button>
+                    </form>
+                  )}
+                  {requestMsg === "sent" && <p className="small" role="status">Request sent.</p>}
+                  {requestMsg === "saved" && <p className="small" role="status">Saved. The email didn&apos;t go out, but they&apos;ll see it in the app.</p>}
+                  {requestMsg?.startsWith("error:") && <p className="small" role="alert" style={{ color: "var(--flagged)" }}>{requestMsg.slice(6)}</p>}
+                </div>
+              )}
               {inviteLive ? (
                 <>
                   <p className="small muted" style={{ marginBottom: "0.4rem" }}>Invite code, valid until {new Date(invite.expires_at).toLocaleDateString("en-GB")}:</p>

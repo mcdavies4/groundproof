@@ -18,6 +18,7 @@ const STYLE: Record<Verdict, { label: string; colour: string }> = {
 export async function alertOwner(db: SupabaseClient, args: {
   ownerId: string; propertyId: string; propertyLabel: string; verdict: Verdict; reason: string;
   note: string | null; isAnchor: boolean; matchType: "postcode" | "coordinates"; stageName: string | null;
+  answersRequest?: boolean;
 }) {
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("ALERT_FROM");
@@ -46,6 +47,7 @@ export async function alertOwner(db: SupabaseClient, args: {
     const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#10251f;max-width:520px;margin:0 auto;padding:24px">
   <p style="margin:0 0 6px;font-size:14px;color:#3d5149">${esc(what)} · ${esc(args.propertyLabel)}</p>
   <h1 style="margin:0 0 14px;font-size:24px;color:${s.colour}">${esc(label)}</h1>
+  ${args.answersRequest ? `<p style="margin:0 0 14px;font-size:15px;font-weight:bold">This is the visit you asked for.</p>` : ""}
   <p style="margin:0 0 14px;font-size:16px;line-height:1.5">${esc(args.reason)}</p>
   ${args.note ? `<p style="margin:0 0 18px;padding-left:12px;border-left:4px solid #f4c531;font-size:15px;line-height:1.5;color:#3d5149"><em>${esc(args.note)}</em></p>` : ""}
   <p style="margin:0 0 24px"><a href="${link}" style="background:#10251f;color:#fff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:4px;display:inline-block">See the photos</a></p>

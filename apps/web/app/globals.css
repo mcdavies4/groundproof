@@ -302,6 +302,10 @@ input:focus { border-color: var(--ink); }
 .viewer-notice { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .viewer-notice form { margin: 0; }
 
+/* ---------- check-in requests ---------- */
+.request-box { padding: 0.9rem; margin: 0 0 1.1rem; background: var(--paper); border-left: 4px solid var(--plate); }
+.request-box form { margin: 0; }
+
 /* phone header: smaller full logo; plate mark only on very narrow screens */
 @media (max-width: 560px) {
   .brand img.brand-full { height: 21px; }

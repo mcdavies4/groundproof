@@ -38,6 +38,8 @@ export interface Checkin {
   lng: number;
   gps_accuracy_m: number;
   server_time: string;
+  device_time: string;
+  taken_offline: boolean;
   photo_paths: string[];
   note: string | null;
   verdict: Verdict;

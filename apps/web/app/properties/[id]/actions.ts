@@ -96,3 +96,28 @@ export async function leaveProperty(propertyId: string) {
   revalidatePath("/dashboard");
   redirect("/dashboard");
 }
+
+export async function requestCheckin(propertyId: string, form: FormData) {
+  const note = String(form.get("note") ?? "").trim();
+  const dueBy = String(form.get("due_by") ?? "").trim();
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("request-checkin", {
+    body: { property_id: propertyId, note, due_by: dueBy || null },
+  });
+  let msg = "sent";
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const body = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    msg = "error:" + (body?.error ?? "Couldn't send the request. Try again.");
+  } else if (data && data.emailed === 0) {
+    msg = "saved";
+  }
+  revalidatePath(`/properties/${propertyId}`);
+  redirect(`/properties/${propertyId}?request=${encodeURIComponent(msg)}#ground`);
+}
+
+export async function cancelRequest(propertyId: string, requestId: string) {
+  const supabase = createClient();
+  await supabase.rpc("cancel_checkin_request", { p_request: requestId });
+  revalidatePath(`/properties/${propertyId}`);
+}
