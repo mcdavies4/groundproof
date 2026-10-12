@@ -14,12 +14,16 @@ export const metadata: Metadata = {
 
 const START = "/login?pilot=1&next=/properties/new";
 
-export default function Pilot() {
+export default function Pilot({ searchParams }: { searchParams: { ref?: string } }) {
+  const invited = /^[a-z0-9]{4,12}$/i.test(searchParams.ref ?? "");
   return (
     <main>
       <section className="wrap hero">
         <div>
           <span className="pilot-badge">Free pilot · Now open</span>
+          {invited && (
+            <p className="friend-note">A friend invited you. After your first verified visit, you both get <strong>3 extra free check-ins</strong>.</p>
+          )}
           <h1>Your property in Nigeria, proven from abroad.</h1>
           <p className="lede">
             Not &ldquo;I&apos;ve been there, all is fine.&rdquo; Every visit to your build, house or land is checked against
@@ -29,7 +33,7 @@ export default function Pilot() {
             <Link className="btn" href={START}>Start your free pilot</Link>
             <Link className="btn secondary" href="/find-someone">No one on the ground?</Link>
           </div>
-          <p className="small muted">Takes 2 minutes. No card, no password.</p>
+          <p className="small muted">Takes 2 minutes. No card, no password.{invited && " Sign up on this device so the invite counts."}</p>
         </div>
         <aside className="proof" aria-label="Example check-in log">
           <PostcodePlate code="EN-05-V19-CD-22" size="lg" />

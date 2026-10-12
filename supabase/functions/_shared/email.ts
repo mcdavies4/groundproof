@@ -57,12 +57,23 @@ export async function alertOwner(db: SupabaseClient, args: {
   <p style="margin:0;font-size:13px;color:#3d5149">You're getting this because you watch ${esc(args.propertyLabel)} on Groundproof.</p>
 </div>`;
 
+    // The owner's verified-visit email carries their invite link: the moment they're happiest to share it.
+    let ownerHtml = html;
+    if (args.verdict === "verified" && !args.isAnchor && !prop?.estate_id && owner.user?.email) {
+      const { data: code } = await db.rpc("referral_code_for", { uid: args.ownerId });
+      if (typeof code === "string") {
+        const invite = `${site}/pilot?ref=${code}`;
+        ownerHtml = html.replace("</div>", `  <p style="margin:18px 0 0;padding:12px 14px;background:#f4f5f2;border-radius:4px;font-size:14px;line-height:1.5">Know someone building or buying at home? Send them your link. When their first visit is verified, you both get 3 free check-ins.<br><a href="${invite}" style="color:#10251f;font-weight:bold">${esc(invite)}</a></p>
+</div>`);
+      }
+    }
+
     // One email each, so nobody sees the others' addresses.
     await Promise.all(recipients.map(async (to) => {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to: [to], subject, html }),
+        body: JSON.stringify({ from, to: [to], subject, html: to === owner.user?.email ? ownerHtml : html }),
       });
       if (!res.ok) console.error("alert email failed", res.status, await res.text());
     }));

@@ -11,6 +11,7 @@ import { cors, json } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
 import { allUsers, nudgeEmail, pilotPeople } from "../_shared/pilot.ts";
+import { sendReferralNotices } from "../_shared/growth.ts";
 
 const DAY = 86_400_000;
 const WINDOW = 21 * DAY;
@@ -24,6 +25,8 @@ Deno.serve(async (req) => {
 
   const db = adminClient();
   const now = Date.now();
+  // Catch any referral payouts whose emails weren't sent at the time (e.g. a visit the owner marked verified).
+  if (!dry_run) await sendReferralNotices(db).catch((e) => console.error("referral notices", e));
   const since = new Date(now - WINDOW - 7 * DAY).toISOString();
 
   // Signed up on the website but never added a property.

@@ -5,6 +5,7 @@ import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Property, Verdict } from "@/lib/types";
 import { GettingStarted } from "@/components/GettingStarted";
+import { InviteFriend } from "@/components/InviteFriend";
 
 export default async function Dashboard() {
   const { supabase, user } = await requireUser();
@@ -45,6 +46,14 @@ export default async function Dashboard() {
     gs = { hasReporter: (reps ?? 0) > 0, hasCheckin: (visits ?? 0) > 0 };
   }
 
+  // Owners get an invite link once they have a property of their own.
+  let invite: { code: string; joined: number; rewarded: number } | null = null;
+  if ((properties ?? []).length > 0) {
+    const [{ data: code }, { data: stats }] = await Promise.all([supabase.rpc("my_referral_code"), supabase.rpc("my_referral_stats")]);
+    const st = (Array.isArray(stats) ? stats[0] : stats) as { joined: number; rewarded: number } | null;
+    if (typeof code === "string") invite = { code, joined: st?.joined ?? 0, rewarded: st?.rewarded ?? 0 };
+  }
+
   return (
     <main className="wrap page">
       <div className="page-head">
@@ -79,6 +88,7 @@ export default async function Dashboard() {
           <PropertyList items={shared as Property[]} latest={latest} />
         </section>
       )}
+      {invite && <InviteFriend {...invite} />}
     </main>
   );
 }

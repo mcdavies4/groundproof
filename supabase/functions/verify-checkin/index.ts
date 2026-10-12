@@ -17,6 +17,7 @@ import { nipost, NipostError, type ReverseData } from "../_shared/nipost.ts";
 import { checkPhotos, headingDiff, type PhotoCheck } from "../_shared/photocheck.ts";
 import { distanceM } from "../_shared/geo.ts";
 import { alertOwner } from "../_shared/email.ts";
+import { maybeAskFeedback, sendReferralNotices } from "../_shared/growth.ts";
 
 const VERIFIED_DISTANCE_M = 25;
 const REVIEW_DISTANCE_M = 60;
@@ -284,6 +285,12 @@ Deno.serve(async (req) => {
     ownerId: property.owner_id, propertyId: property.id, propertyLabel: property.label,
     verdict: verdict!, reason, note: photo.note, isAnchor: c.is_anchor, matchType: matchType!, stageName, answersRequest,
   });
+
+  if (verdict! === "verified" && !c.is_anchor) {
+    // Referral payouts happen in the database as the verdict lands; these just send the emails.
+    await sendReferralNotices(db).catch((e) => console.error("referral notices", e));
+    await maybeAskFeedback(db, property.owner_id).catch((e) => console.error("feedback ask", e));
+  }
 
   return json({ verdict: verdict!, reason, note: photo.note, match_type: matchType!, mock: rev.mock });
 });

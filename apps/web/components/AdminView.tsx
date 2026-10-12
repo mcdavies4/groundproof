@@ -4,6 +4,7 @@ import type { Verdict } from "@/lib/types";
 import { AdminPricing, type Band, type Match, type PricingActions } from "./AdminPricing";
 import { AdminTodo, type TodoActions } from "./AdminTodo";
 import { AdminPilot, type PilotData } from "./AdminPilot";
+import { AdminGrowth, type GrowthData } from "./AdminGrowth";
 
 export interface Stats {
   generatedAt: string;
@@ -29,6 +30,8 @@ export interface Stats {
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
   settings?: { matchedVisitsFree: boolean };
   pilot?: PilotData;
+  referrals?: GrowthData["referrals"];
+  feedback?: GrowthData["feedback"];
   bands?: Band[];
   ownerProperties?: Record<string, { id: string; label: string }[]>;
   staleRequests?: { property: string; propertyId: string; since: string }[];
@@ -61,6 +64,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, s
       {notice && !pricing && <p className="notice">{notice.replace(/^(error|ok):/, "")}</p>}
       {todo && <AdminTodo s={s} actions={todo} />}
       {s.pilot && nudge && <AdminPilot data={s.pilot} nudge={nudge} show={show} notice={show ? notice : undefined} />}
+      {(s.referrals || s.feedback) && <AdminGrowth referrals={s.referrals ?? []} feedback={s.feedback ?? []} />}
 
       <section className="admin-tiles" aria-label="Totals">
         <Tile n={t.properties} label="Properties" sub={`${t.anchored} anchored`} />

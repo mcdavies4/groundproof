@@ -24,7 +24,10 @@ export async function sendLink(_prev: FormState, form: FormData): Promise<FormSt
     options: {
       emailRedirectTo: `${siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
       // Only stored when this creates a new account: where they came from, for the pilot funnel.
-      data: { signup_via: "web", source: cookies().get("gp_src")?.value ?? "direct", landing: cookies().get("gp_land")?.value ?? null },
+      data: {
+        signup_via: "web", source: cookies().get("gp_src")?.value ?? "direct", landing: cookies().get("gp_land")?.value ?? null,
+        ref: cookies().get("gp_ref")?.value ?? null,   // a friend's invite code; credits both after the first verified visit
+      },
     },
   });
   if (error) return { error: error.message };

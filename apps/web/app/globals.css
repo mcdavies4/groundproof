@@ -293,7 +293,7 @@ input:focus { border-color: var(--ink); }
 .tag.warn { background: #f3e6cf; color: var(--review); }
 @media (max-width: 900px) {
   .admin-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .admin-grid { grid-template-columns: 1fr; }
+  .admin-grid { grid-template-columns: minmax(0, 1fr); }
   .funnel li { grid-template-columns: 1fr 4.5rem; }
   .funnel-track { grid-column: 1 / -1; grid-row: 2; }
 }
@@ -437,3 +437,29 @@ label.radio input { width: 22px; height: 22px; accent-color: var(--ink); }
 .stage-dots i.on { background: var(--verified); }
 .pilot-filter { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-size: 0.9rem; }
 .pilot-filter a[aria-current="true"] { font-weight: 800; text-decoration: none; color: var(--ink); }
+.friend-note { background: #e6f1ea; border-left: 4px solid var(--verified); padding: 0.6rem 0.9rem; border-radius: 4px; margin: 0 0 1rem; }
+
+/* Invite a friend */
+.invite-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 1.5rem; align-items: center; margin-top: 2rem; }
+.invite-panel h2 { margin: 0; font-size: 1.25rem; }
+.invite-panel p { margin: 0.25rem 0 0; }
+.invite-panel .share-row { grid-column: 1 / -1; }
+.invite-stats { text-align: right; font-size: 0.9rem; }
+.invite-stats strong { display: block; font-size: 1.6rem; line-height: 1; }
+@media (max-width: 600px) { .invite-panel { grid-template-columns: 1fr; } .invite-stats { text-align: left; } }
+
+/* Feedback */
+.score-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.5rem 0 0.25rem; }
+.score-row label { position: relative; }
+.score-row input { position: absolute; opacity: 0; inset: 0; }
+.score-row span { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border: 2px solid var(--ink); border-radius: 4px; font-weight: 800; cursor: pointer; background: var(--surface); }
+.score-row input:checked + span { background: var(--ink); color: #fff; }
+.score-row input:focus-visible + span { outline: 3px solid var(--plate); outline-offset: 2px; }
+.score-ends { display: flex; justify-content: space-between; max-width: 31rem; font-size: 0.85rem; color: var(--ink-soft); }
+.check-line { display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 400; }
+.check-line input { width: auto; margin-top: 0.3rem; }
+
+/* Admin: growth */
+.nps { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: baseline; margin-bottom: 0.75rem; }
+.nps strong { font-size: 2rem; line-height: 1; }
+.quote { margin-inline: 0; border-left: 4px solid var(--plate); padding: 0.2rem 0 0.2rem 0.8rem; margin: 0.6rem 0; }

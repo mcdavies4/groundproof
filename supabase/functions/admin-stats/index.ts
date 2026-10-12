@@ -262,6 +262,10 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
     db.from("matches").select("id, owner_name, owner_email, reporter_id, property_id, visit_type, price_ngn, frequency, status, created_at").order("created_at", { ascending: false }).limit(100),
     db.from("reporter_rates").select("user_id, visit_type, price_ngn"),
   ]);
+  const [{ data: referralRows }, { data: feedbackRows }] = await Promise.all([
+    db.from("referrals").select("referred_id, referrer_id, created_at, rewarded_at, referrer_capped").order("created_at", { ascending: false }).limit(300),
+    db.from("feedback").select("user_id, created_at, score, useful, improve, quote_ok, quote_name, answered_at").order("created_at", { ascending: false }).limit(300),
+  ]);
   const { data: staleReqs } = await db.from("checkin_requests").select("property_id, created_at")
     .is("fulfilled_at", null).is("cancelled_at", null).lt("created_at", new Date(Date.now() - 3 * DAY).toISOString());
 
@@ -326,6 +330,11 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
       units: P.filter((p) => p.owner_id === d.user_id && (p as { estate_id?: string | null }).estate_id).length,
     })),
     settings: { matchedVisitsFree: matchedFree },
+    referrals: (referralRows ?? []).map((r) => ({
+      referrer: emails.get(r.referrer_id) ?? "(deleted)", friend: emails.get(r.referred_id) ?? "(deleted)",
+      joined: r.created_at, rewarded: r.rewarded_at, capped: r.referrer_capped,
+    })),
+    feedback: (feedbackRows ?? []).map((f) => ({ ...f, user_id: undefined, email: emails.get(f.user_id) ?? "(deleted)" })),
     pilot: {
       people: pilot.slice(0, 300),
       // Sign-ups by where they came from, and how far each source's people got.

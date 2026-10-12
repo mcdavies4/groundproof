@@ -11,19 +11,23 @@ const SOURCES: [RegExp, string][] = [
   [/(^|\.)bing\.com$/, "bing"],
 ];
 
-/** First touch only: where this visitor came from, kept for 30 days so sign-ups can be credited to it. */
+/** First touch only: where this visitor came from (and whose invite link), kept 30 days so sign-ups are credited. */
 function rememberSource(request: NextRequest, response: NextResponse) {
-  if (request.cookies.get("gp_src")) return response;
   const q = request.nextUrl.searchParams;
-  let src = (q.get("utm_source") ?? q.get("src") ?? q.get("ref") ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+  const opts = { maxAge: 30 * 86_400, path: "/", sameSite: "lax" as const };
+  const ref = (q.get("ref") ?? "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
+  if (ref && !request.cookies.get("gp_ref")) response.cookies.set("gp_ref", ref, opts);
+  if (request.cookies.get("gp_src")) return response;
+
+  let src = (q.get("utm_source") ?? q.get("src") ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+  if (!src && ref) src = "referral";
   if (!src) {
-    const ref = request.headers.get("referer");
+    const referer = request.headers.get("referer");
     let host = "";
-    try { host = ref ? new URL(ref).hostname.replace(/^www\./, "") : ""; } catch { host = ""; }
+    try { host = referer ? new URL(referer).hostname.replace(/^www\./, "") : ""; } catch { host = ""; }
     if (!host || host === request.nextUrl.hostname.replace(/^www\./, "") || host.endsWith("groundproof.site")) return response;
     src = SOURCES.find(([re]) => re.test(host))?.[1] ?? host.slice(0, 30);
   }
-  const opts = { maxAge: 30 * 86_400, path: "/", sameSite: "lax" as const };
   response.cookies.set("gp_src", src, opts);
   response.cookies.set("gp_land", request.nextUrl.pathname.slice(0, 60), opts);
   return response;
