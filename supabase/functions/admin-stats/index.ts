@@ -3,6 +3,7 @@
 import { cors, json } from "../_shared/cors.ts";
 import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
+import { allUsers, nudgeEmail, pilotPeople, STAGES } from "../_shared/pilot.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const PLAY = "https://play.google.com/store/apps/details?id=ng.the36th.groundproof";
@@ -77,6 +78,24 @@ Deno.serve(async (req) => {
   const { data: freeRow } = await db.from("app_settings").select("value").eq("key", "matched_visits_free").maybeSingle();
   const matchedFree = freeRow ? freeRow.value === true : true;
 
+  if (body.action === "nudge_user" && body.user_id) {
+    const users = await allUsers(db);
+    const u = users.find((x) => x.id === body.user_id);
+    const person = u ? (await pilotPeople(db, [u]))[0] : null;
+    if (!person) return json({ error: "That person isn't a pilot owner." }, 404);
+    const mail = nudgeEmail(person, SITE);
+    if (!mail) return json({ error: "They've already had a verified visit." }, 400);
+    const admins = (Deno.env.get("ADMIN_EMAILS") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (!key || !from) return json({ error: "Email isn't set up (RESEND_API_KEY / ALERT_FROM)." }, 500);
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [person.email], reply_to: admins[0], subject: mail.subject, html: mail.html }),
+    }).catch(() => null);
+    if (!res?.ok) return json({ error: "The email didn't send. Try again." }, 502);
+    await db.from("pilot_nudges").upsert({ user_id: person.id, stage: person.stage, sent_at: new Date().toISOString(), auto: false });
+    return json({ ok: true, stage: person.stage });
+  }
   if (body.action === "set_band") {
     const state = String(body.state ?? "").trim(), visitType = String(body.visit_type ?? "");
     const min = Math.round(Number(body.min_ngn)), max = Math.round(Number(body.max_ngn));
@@ -247,12 +266,10 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
     .is("fulfilled_at", null).is("cancelled_at", null).lt("created_at", new Date(Date.now() - 3 * DAY).toISOString());
 
   // Emails for owners and reporters
+  const users = await allUsers(db);
   const emails = new Map<string, string>();
-  for (let page = 1; page <= 10; page++) {
-    const { data } = await db.auth.admin.listUsers({ page, perPage: 1000 });
-    for (const u of data?.users ?? []) if (u.email) emails.set(u.id, u.email);
-    if (!data || data.users.length < 1000) break;
-  }
+  for (const u of users) if (u.email) emails.set(u.id, u.email);
+  const pilot = await pilotPeople(db, users);
 
   const P = props ?? [], C = checkins ?? [], M = members ?? [], Pay = payments ?? [], W = waitlist ?? [];
   const byProp = new Map<string, typeof C>();
@@ -309,6 +326,18 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
       units: P.filter((p) => p.owner_id === d.user_id && (p as { estate_id?: string | null }).estate_id).length,
     })),
     settings: { matchedVisitsFree: matchedFree },
+    pilot: {
+      people: pilot.slice(0, 300),
+      // Sign-ups by where they came from, and how far each source's people got.
+      sources: Object.values(pilot.reduce((acc, p) => {
+        const r = (acc[p.source] ??= { source: p.source, signedUp: 0, added: 0, verified: 0, last7: 0 });
+        r.signedUp++;
+        if (STAGES.indexOf(p.stage) >= 1) r.added++;
+        if (p.stage === "verified") r.verified++;
+        if (p.signedUp >= since7) r.last7++;
+        return acc;
+      }, {} as Record<string, { source: string; signedUp: number; added: number; verified: number; last7: number }>)).sort((a, b) => b.signedUp - a.signedUp),
+    },
     bands: bands ?? [],
     // Each owner's own properties (not estate units), for linking matches.
     ownerProperties: (() => {
@@ -330,7 +359,7 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
     groundRequests: groundRequests ?? [],
     reporterApplications: reporterApps ?? [],
     funnel: [
-      { step: "Joined waitlist", count: W.length },
+      { step: "Signed up", count: pilot.length },
       { step: "Added a property", count: owners.size },
       { step: "Invited a reporter", count: new Set(M.filter((m) => m.role === "reporter").map((m) => P.find((p) => p.id === m.property_id)?.owner_id)).size },
       { step: "Property anchored", count: new Set(P.filter((p) => p.anchored_at).map((p) => p.owner_id)).size },

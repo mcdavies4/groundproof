@@ -3,6 +3,7 @@ import { VerdictBadge } from "@/components/VerdictBadge";
 import type { Verdict } from "@/lib/types";
 import { AdminPricing, type Band, type Match, type PricingActions } from "./AdminPricing";
 import { AdminTodo, type TodoActions } from "./AdminTodo";
+import { AdminPilot, type PilotData } from "./AdminPilot";
 
 export interface Stats {
   generatedAt: string;
@@ -27,6 +28,7 @@ export interface Stats {
   waitlist: { email: string; plan: string | null; created_at: string }[];
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
   settings?: { matchedVisitsFree: boolean };
+  pilot?: PilotData;
   bands?: Band[];
   ownerProperties?: Record<string, { id: string; label: string }[]>;
   staleRequests?: { property: string; propertyId: string; since: string }[];
@@ -40,8 +42,9 @@ const naira = new Intl.NumberFormat("en-GB", { style: "currency", currency: "NGN
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "–");
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export function AdminView({ s, approve, pricing, suspend, notice, todo }: {
+export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, show }: {
   s: Stats; approve?: (userId: string) => Promise<void>; pricing?: PricingActions; todo?: TodoActions;
+  nudge?: (userId: string) => Promise<void>; show?: string;
   suspend?: (userId: string, on: boolean) => Promise<void>; notice?: string;
 }) {
   const t = s.totals;
@@ -57,6 +60,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo }: {
 
       {notice && !pricing && <p className="notice">{notice.replace(/^(error|ok):/, "")}</p>}
       {todo && <AdminTodo s={s} actions={todo} />}
+      {s.pilot && nudge && <AdminPilot data={s.pilot} nudge={nudge} show={show} notice={show ? notice : undefined} />}
 
       <section className="admin-tiles" aria-label="Totals">
         <Tile n={t.properties} label="Properties" sub={`${t.anchored} anchored`} />
@@ -186,7 +190,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo }: {
 
       {pricing && (
         <AdminPricing
-          bands={s.bands ?? []} matches={s.matches ?? []} actions={pricing} notice={notice}
+          bands={s.bands ?? []} matches={s.matches ?? []} actions={pricing} notice={show ? undefined : notice}
           matchedFree={s.settings?.matchedVisitsFree ?? true}
           reporters={(s.reporters ?? []).map((r) => ({ id: r.id, name: r.name, email: r.email, where: r.where, suspended: r.suspended, hasProfile: r.hasProfile }))}
           requests={(s.groundRequests ?? []).map((g) => ({ id: g.id, name: g.name, email: g.email, area: g.area, state: g.state, status: g.status }))}

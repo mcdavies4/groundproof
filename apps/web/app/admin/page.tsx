@@ -72,13 +72,18 @@ async function endMatch(id: string) {
   await adminAction({ action: "end_match", match_id: id });
   revalidatePath("/admin");
 }
+async function nudgeUser(userId: string) {
+  "use server";
+  const r = await adminAction({ action: "nudge_user", user_id: userId });
+  redirect(`/admin?show=stuck&notice=${encodeURIComponent(r.ok ? "ok:Nudge sent. Replies come to your inbox." : `error:${r.error}`)}#pilot`);
+}
 async function suspendReporter(userId: string, on: boolean) {
   "use server";
   await adminAction({ action: "suspend_reporter", user_id: userId, suspended: on });
   revalidatePath("/admin");
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: { notice?: string } }) {
+export default async function AdminPage({ searchParams }: { searchParams: { notice?: string; show?: string } }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login?next=/admin");
   const { data, error } = await supabase.functions.invoke("admin-stats", { body: {} });
@@ -88,6 +93,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { noti
     <AdminView
       s={s} approve={approveDeveloper} suspend={suspendReporter} notice={searchParams.notice}
       pricing={{ setBand, deleteBand, createMatch, endMatch, setMatchedFree }}
+      nudge={nudgeUser} show={searchParams.show}
       todo={{ introduce: createMatch, review: reviewApplication, link: linkMatch, close: closeRequest }}
     />
   );

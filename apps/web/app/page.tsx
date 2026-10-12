@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
-import { WaitlistForm } from "@/components/WaitlistForm";
 import { GetTheApp } from "@/components/GetTheApp";
 
 export default function Home() {
@@ -15,8 +14,11 @@ export default function Home() {
             building&apos;s NIPOST postcode. If the phone wasn&apos;t standing at your house, you&apos;ll know
             before you send the next payment.
           </p>
-          <WaitlistForm />
-          <p className="small muted">Pilot: 5 free check-ins per property. No card needed.</p>
+          <div className="pilot-ctas">
+            <Link className="btn" href="/login?pilot=1&next=/properties/new">Start your free pilot</Link>
+            <Link className="btn secondary" href="/pilot">What&apos;s in the pilot</Link>
+          </div>
+          <p className="small muted">Pilot: up to 2 properties, 5 free check-ins on each. No card needed.</p>
         </div>
 
         <aside className="proof" aria-label="Example check-in log">

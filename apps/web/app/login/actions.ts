@@ -1,6 +1,6 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/app/actions";
 
@@ -21,7 +21,11 @@ export async function sendLink(_prev: FormState, form: FormData): Promise<FormSt
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}` },
+    options: {
+      emailRedirectTo: `${siteOrigin()}/auth/callback?next=${encodeURIComponent(next)}`,
+      // Only stored when this creates a new account: where they came from, for the pilot funnel.
+      data: { signup_via: "web", source: cookies().get("gp_src")?.value ?? "direct", landing: cookies().get("gp_land")?.value ?? null },
+    },
   });
   if (error) return { error: error.message };
   return { ok: `Sign-in link sent to ${email}. Open it in this same browser.` };

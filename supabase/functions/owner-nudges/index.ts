@@ -3,12 +3,14 @@
 //   invite       1+ day after adding a property, nobody on the ground yet
 //   anchor       3+ days after adding it, still not anchored
 //   first_visit  7+ days after anchoring, no check-in since and no open request
+//   signed_up    1+ day after signing up on the website with no property yet (once, within 14 days; from Emeka)
 // Only properties added (or anchored) in the last 21 days, so older properties never get a burst.
 // Each nudge goes once per property; owners can turn them off on their account page.
 // Body { "dry_run": true } lists what would be sent.
 import { cors, json } from "../_shared/cors.ts";
 import { adminClient } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
+import { allUsers, nudgeEmail, pilotPeople } from "../_shared/pilot.ts";
 
 const DAY = 86_400_000;
 const WINDOW = 21 * DAY;
@@ -24,9 +26,43 @@ Deno.serve(async (req) => {
   const now = Date.now();
   const since = new Date(now - WINDOW - 7 * DAY).toISOString();
 
+  // Signed up on the website but never added a property.
+  const signupWindow = 14 * DAY;
+  const signupDue = (await pilotPeople(db, (await allUsers(db)).filter((u) => {
+    const age = now - Date.parse(u.created_at);
+    return (u.user_metadata as Record<string, unknown> | undefined)?.signup_via === "web" && age >= DAY && age <= signupWindow;
+  }))).filter((p) => p.stage === "signed_up" && !p.nudged.signed_up);
+  const { data: signupPrefs } = signupDue.length
+    ? await db.from("email_prefs").select("user_id, tips").in("user_id", signupDue.map((p) => p.id)) : { data: [] };
+  const signupOptedOut = new Set((signupPrefs ?? []).filter((p) => !p.tips).map((p) => p.user_id));
+  const signupNudges = signupDue.filter((p) => !signupOptedOut.has(p.id));
+
+  async function sendSignupNudges() {
+    const key = Deno.env.get("RESEND_API_KEY"), from = Deno.env.get("ALERT_FROM");
+    const site = Deno.env.get("SITE_URL") ?? "https://groundproof.site";
+    const replyTo = (Deno.env.get("ADMIN_EMAILS") ?? "").split(",").map((x) => x.trim()).filter(Boolean)[0];
+    const out: unknown[] = [];
+    if (!key || !from) return out;
+    for (const p of signupNudges) {
+      const { data: claimed } = await db.from("pilot_nudges").upsert({ user_id: p.id, stage: "signed_up", auto: true }, { onConflict: "user_id,stage", ignoreDuplicates: true }).select("user_id");
+      if (!claimed?.length) continue;
+      const mail = nudgeEmail(p, site)!;
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [p.email], ...(replyTo ? { reply_to: replyTo } : {}), subject: mail.subject, html: mail.html }),
+      }).catch(() => null);
+      out.push({ signup: p.email, kind: "signed_up", ok: Boolean(res?.ok) });
+    }
+    return out;
+  }
+
   const { data: props } = await db.from("properties").select("id, owner_id, label, created_at, anchored_at").gte("created_at", since).is("estate_id", null).eq("kind", "building");  // not estate units or plots
   const P = props ?? [];
-  if (!P.length) return json({ sent: [], checked: 0 });
+  if (!P.length) {
+    if (dry_run) return json({ checked: 0, due: signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" })) });
+    return json({ checked: 0, sent: await sendSignupNudges() });
+  }
   const ids = P.map((p) => p.id);
 
   const [{ data: members }, { data: visits }, { data: requests }, { data: log }, { data: prefs }] = await Promise.all([
@@ -57,7 +93,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (dry_run) return json({ checked: P.length, due: due.map((d) => ({ property: d.p.label, kind: d.kind })) });
+  if (dry_run) return json({ checked: P.length, due: [...due.map((d) => ({ property: d.p.label, kind: d.kind })), ...signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" }))] });
 
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("ALERT_FROM");
@@ -118,5 +154,6 @@ Deno.serve(async (req) => {
     if (!res.ok) console.error("nudge failed", res.status, await res.text());
     results.push({ property: p.label, kind, ok: res.ok });
   }
+  results.push(...await sendSignupNudges());
   return json({ checked: P.length, sent: results });
 });
