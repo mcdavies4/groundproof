@@ -2,8 +2,8 @@
 export const COMPANY = {
   name: "The 36th Solutions Ltd",
   registeredIn: "Nigeria",
-  address: "REPLACE WITH REGISTERED ADDRESS",
-  contactEmail: "REPLACE-WITH-YOUR-EMAIL@example.com",
+  address: "Abuja, Nigeria",
+  contactEmail: "the36thltd@outlook.com",
   product: "Groundproof",
-  updated: "4 October 2026",
+  updated: "12 October 2026",
 };

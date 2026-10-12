@@ -62,7 +62,7 @@ export default function Terms() {
       <h2>Law</h2>
       <p>These terms are governed by the laws of the Federal Republic of Nigeria.</p>
 
-      <p>Contact: <a href={`mailto:${C.contactEmail}`}>{C.contactEmail}</a></p>
+      <p>Contact: {C.name}, {C.address}. Email <a href={`mailto:${C.contactEmail}`}>{C.contactEmail}</a></p>
     </main>
   );
 }
