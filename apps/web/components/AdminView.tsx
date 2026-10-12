@@ -28,7 +28,7 @@ export interface Stats {
   payments: { time: string; property: string; who: string; product: string; amount: number; status: string }[];
   waitlist: { email: string; plan: string | null; created_at: string }[];
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
-  settings?: { matchedVisitsFree: boolean };
+  settings?: { matchedVisitsFree: boolean; estateUnitPrice?: number };
   pilot?: PilotData;
   referrals?: GrowthData["referrals"];
   feedback?: GrowthData["feedback"];
@@ -37,7 +37,7 @@ export interface Stats {
   staleRequests?: { property: string; propertyId: string; since: string }[];
   matches?: Match[];
   reporters?: { id: string; state: string | null; suspended: boolean; hasProfile: boolean; agreedRules: boolean; rates: Record<string, number>; email: string; name: string | null; slug: string | null; where: string | null; visits: number; verified: number; flagged: number; properties: number; last: string | null }[];
-  groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string }[];
+  groundRequests?: { id: string; name: string; email: string; phone: string | null; state: string; area: string; property_type: string; frequency: string; notes: string | null; status: string; created_at: string; kind?: string; property_id?: string | null }[];
   reporterApplications?: { id: string; name: string; email: string; phone: string; state: string; areas: string; occupation: string; android: boolean; notes: string | null; status: string; created_at: string }[];
 }
 
@@ -195,7 +195,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, s
       {pricing && (
         <AdminPricing
           bands={s.bands ?? []} matches={s.matches ?? []} actions={pricing} notice={show ? undefined : notice}
-          matchedFree={s.settings?.matchedVisitsFree ?? true}
+          matchedFree={s.settings?.matchedVisitsFree ?? true} estatePrice={s.settings?.estateUnitPrice}
           reporters={(s.reporters ?? []).map((r) => ({ id: r.id, name: r.name, email: r.email, where: r.where, suspended: r.suspended, hasProfile: r.hasProfile }))}
           requests={(s.groundRequests ?? []).map((g) => ({ id: g.id, name: g.name, email: g.email, area: g.area, state: g.state, status: g.status }))}
         />
@@ -244,7 +244,7 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, s
                   <td>{day(g.created_at)}</td>
                   <td>{g.name}<div className="small"><a href={`mailto:${g.email}?subject=${encodeURIComponent("Your Groundproof request")}`}>{g.email}</a>{g.phone && <> · {g.phone}</>}</div></td>
                   <td>{g.area}, {g.state}</td>
-                  <td>{LEAD_LABEL[g.property_type] ?? g.property_type}, {LEAD_LABEL[g.frequency] ?? g.frequency}{g.notes && <div className="small muted">{g.notes}</div>}</td>
+                  <td>{g.kind === "independent" ? <span className="tag">independent check</span> : null}{LEAD_LABEL[g.property_type] ?? g.property_type}, {LEAD_LABEL[g.frequency] ?? g.frequency}{g.notes && <div className="small muted">{g.notes}</div>}</td>
                 </tr>
               ))}
               {(s.groundRequests ?? []).length === 0 && <tr><td colSpan={4} className="muted">No requests yet.</td></tr>}

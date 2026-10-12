@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
 import { PlanPanel } from "@/components/PlanPanel";
+import { IndependentCheck } from "@/components/IndependentCheck";
 import { ProgressView, type ProgressShot } from "@/components/ProgressView";
 import { PlotDetail } from "@/components/PlotDetail";
 import { VISIT_TYPES, matchedVisitsFree, naira, type VisitType } from "@/lib/rates";
@@ -20,7 +21,7 @@ export default async function PropertyPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { payment?: string; viewer?: string; request?: string };
+  searchParams: { payment?: string; viewer?: string; request?: string; independent?: string };
 }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
@@ -30,8 +31,18 @@ export default async function PropertyPage({
   const isOwner = (property as Property & { owner_id: string }).owner_id === user.id;
   const estateId = (property as Property & { estate_id?: string | null }).estate_id ?? null;
   const { data: estate } = estateId
-    ? await supabase.from("estates").select("id, name").eq("id", estateId).maybeSingle()
+    ? await supabase.from("estates").select("id, name, plan_expires_at").eq("id", estateId).maybeSingle()
     : { data: null };
+  // A buyer on an estate unit: their independent reporter, if they have one, and their own checks.
+  const buyerView = Boolean(estateId) && !isOwner;
+  const [{ data: indMatch }, { data: indCredits }, free] = buyerView
+    ? await Promise.all([
+        supabase.from("matches").select("price_ngn, frequency, created_at").eq("property_id", params.id).eq("buyer_id", user.id)
+          .eq("kind", "independent").eq("status", "active").maybeSingle(),
+        supabase.from("independent_credits").select("credits").eq("property_id", params.id).eq("user_id", user.id).maybeSingle(),
+        matchedVisitsFree(supabase),
+      ])
+    : [{ data: null }, { data: null }, true];
 
   const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }, { data: requests }, { count: reporterCount }] = await Promise.all([
     supabase.from("milestones").select("*").eq("property_id", property.id).order("sort"),
@@ -264,7 +275,19 @@ export default async function PropertyPage({
 
           </>}
 
-          {isOwner && <PlanPanel property={property} error={searchParams.payment === "error"} />}
+          {isOwner && !estateId && <PlanPanel property={property} error={searchParams.payment === "error"} />}
+          {isOwner && estate && (
+            <div className="panel">
+              <h3>Billing</h3>
+              {estate.plan_expires_at && new Date(estate.plan_expires_at) > new Date()
+                ? <p className="small" style={{ margin: 0 }}>Covered by the estate plan until {new Date(estate.plan_expires_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Visits on every unit are included.</p>
+                : <p className="small" style={{ margin: 0 }}>{property.check_credits} free check-in{property.check_credits === 1 ? "" : "s"} left on this unit. One <Link href={`/estates/${estate.id}#plan`}>estate plan</Link> covers every unit.</p>}
+            </div>
+          )}
+          {buyerView && estate && (
+            <IndependentCheck propertyId={property.id} estateName={estate.name} match={indMatch} asked={false}
+              credits={indCredits?.credits ?? 0} free={free} msg={searchParams.independent} />
+          )}
 
           {isOwner && (
             <div className="panel" id="people">

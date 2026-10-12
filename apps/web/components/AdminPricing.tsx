@@ -15,14 +15,15 @@ export type PricingActions = {
   deleteBand: (state: string, visitType: string) => Promise<void>;
   createMatch: (form: FormData) => Promise<void>;
   endMatch: (id: string) => Promise<void>;
+  setEstatePrice?: (form: FormData) => Promise<void>;
 };
 
 const FREQ: Record<string, string> = { once: "One visit", monthly: "Monthly", fortnightly: "Every 2 weeks", weekly: "Weekly" };
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 /** Rate bands, introductions and matches, on the admin dashboard. */
-export function AdminPricing({ bands, matches, reporters, requests, actions, notice, matchedFree }: {
-  bands: Band[]; matches: Match[]; reporters: Reporter[]; requests: Request[]; actions: PricingActions; notice?: string; matchedFree: boolean;
+export function AdminPricing({ bands, matches, reporters, requests, actions, notice, matchedFree, estatePrice }: {
+  bands: Band[]; matches: Match[]; reporters: Reporter[]; requests: Request[]; actions: PricingActions; notice?: string; matchedFree: boolean; estatePrice?: number;
 }) {
   const states = [...new Set(bands.map((b) => b.state))];
   const matchable = reporters.filter((r) => r.hasProfile && !r.suspended);
@@ -44,6 +45,19 @@ export function AdminPricing({ bands, matches, reporters, requests, actions, not
           <button className={`btn${matchedFree ? "" : " secondary"}`} type="submit">{matchedFree ? "End the free pilot" : "Make matched visits free again"}</button>
         </form>
       </section>
+
+      {actions.setEstatePrice && (
+        <section className="panel switch-panel">
+          <div>
+            <h2 style={{ margin: 0 }}>Estate plan: ₦{(estatePrice ?? 2000).toLocaleString("en-GB")} per unit a month</h2>
+            <p className="small muted" style={{ margin: "0.4rem 0 0" }}>Developers pay this × units (minimum 10) for unlimited visits on every unit. 12 months costs 10. Changes apply to the next payment.</p>
+          </div>
+          <form action={actions.setEstatePrice} className="inline-form">
+            <input name="price" type="number" min={100} step={50} defaultValue={estatePrice ?? 2000} aria-label="Price per unit per month (naira)" style={{ width: "8rem" }} />
+            <button className="btn secondary" type="submit">Save</button>
+          </form>
+        </section>
+      )}
 
       <div className="admin-grid">
         <section className="panel admin-table">

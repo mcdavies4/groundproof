@@ -127,3 +127,21 @@ export async function setRequireVideo(propertyId: string, on: boolean) {
   await supabase.from("properties").update({ require_video: on }).eq("id", propertyId);
   revalidatePath(`/properties/${propertyId}`);
 }
+
+/** A buyer on an estate unit asks for an independent Groundproof reporter. */
+export async function requestIndependent(propertyId: string, form: FormData) {
+  const supabase = createClient();
+  const { error } = await supabase.functions.invoke("independent-check", {
+    body: {
+      property_id: propertyId, name: form.get("name"), state: form.get("state"),
+      frequency: form.get("frequency"), notes: form.get("notes"),
+    },
+  });
+  let msg = "sent";
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const res = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    msg = `error:${(res?.error as string) ?? "That didn't work. Try again."}`;
+  }
+  redirect(`/properties/${propertyId}?independent=${encodeURIComponent(msg)}#independent`);
+}

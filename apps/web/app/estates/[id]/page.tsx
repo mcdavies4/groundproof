@@ -4,23 +4,25 @@ import { requireUser } from "@/lib/supabase/server";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { ShareLink } from "@/components/ShareLink";
 import { AddBuyersForm, AddUnitsForm } from "@/components/EstateForms";
+import { EstatePlanPanel } from "@/components/EstatePlanPanel";
 import { createEstateCode, setEstateShare } from "../actions";
 import type { Verdict } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-export default async function EstatePage({ params }: { params: { id: string } }) {
+export default async function EstatePage({ params, searchParams }: { params: { id: string }; searchParams: { payment?: string } }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect(`/login?next=/estates/${params.id}`);
 
   const { data: estate } = await supabase.from("estates").select("*").eq("id", params.id).eq("developer_id", user.id).maybeSingle();
   if (!estate) notFound();
 
-  const [{ data: units }, { data: codes }, { count: reporters }] = await Promise.all([
+  const [{ data: units }, { data: codes }, { count: reporters }, { data: unitPrice }] = await Promise.all([
     supabase.from("properties").select("id, label, postcode, anchored_at, anchor_mode").eq("estate_id", estate.id).order("label"),
     supabase.from("invites").select("code, used_at, expires_at").eq("estate_id", estate.id).order("created_at", { ascending: false }).limit(1),
     supabase.from("estate_reporters").select("user_id", { count: "exact", head: true }).eq("estate_id", estate.id),
+    supabase.rpc("estate_unit_price"),
   ]);
   const ids = (units ?? []).map((u) => u.id);
   const [{ data: cs }, { data: buyers }] = ids.length
@@ -85,6 +87,9 @@ export default async function EstatePage({ params }: { params: { id: string } })
         </section>
 
         <aside>
+          <EstatePlanPanel estateId={estate.id} units={(units ?? []).length} unitPrice={Number(unitPrice ?? 2000)}
+            expiresAt={estate.plan_expires_at ?? null} paidUnits={estate.plan_units ?? null} error={searchParams.payment === "error"} />
+
           <div className="panel">
             <h3>Reporter code for the whole estate</h3>
             {codeLive ? (
@@ -98,7 +103,7 @@ export default async function EstatePage({ params }: { params: { id: string } })
                 <button className="btn secondary" type="submit">Create estate code</button>
               </form>
             )}
-            <p className="small" style={{ marginTop: "0.75rem" }}>Want an independent reporter? <Link href="/find-someone">We&apos;ll find one</Link>.</p>
+            <p className="small" style={{ marginTop: "0.75rem" }}>No site supervisor to send? <Link href="/find-someone">We&apos;ll find a reporter</Link>. Buyers can also ask for their own independent checks on their unit, at their cost.</p>
           </div>
 
           <div className="panel">

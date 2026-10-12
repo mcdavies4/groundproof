@@ -41,7 +41,7 @@ export function AdminTodo({ s, actions }: { s: Stats; actions: TodoActions }) {
             const b = band(g.state);
             return (
               <div className="todo-item" key={g.id}>
-                <div><strong>{g.name}</strong>: {g.area}, {g.state} · {FREQ[g.frequency] ?? g.frequency} <span className="muted small">· {ago(g.created_at)}</span>
+                <div>{g.kind === "independent" && <span className="tag">Independent check for a buyer</span>}<strong>{g.name}</strong>: {g.area}, {g.state} · {FREQ[g.frequency] ?? g.frequency} <span className="muted small">· {ago(g.created_at)}</span>
                   {g.notes && <div className="small muted">{g.notes}</div>}</div>
                 <div className="todo-actions">
                   {picks.length === 0 ? (
@@ -68,7 +68,7 @@ export function AdminTodo({ s, actions }: { s: Stats; actions: TodoActions }) {
               </div>
             );
           })}
-          <p className="small muted">Introduce sends both sides the agreement. Need a different price or visit type? Use the full form below.</p>
+          <p className="small muted">Introduce sends both sides the agreement. For an independent check, the reporter goes straight onto the buyer&apos;s unit and the developer is told. Need a different price or visit type? Use the full form below.</p>
         </div>
       )}
 

@@ -71,3 +71,10 @@ export async function setEstateShare(estateId: string, on: boolean) {
   await supabase.from("estates").update({ share_token: on ? randomBytes(18).toString("base64url") : null }).eq("id", estateId);
   revalidatePath(`/estates/${estateId}`);
 }
+
+export async function startEstateCheckout(estateId: string, product: "estate_30" | "estate_365") {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("create-payment", { body: { estate_id: estateId, product } });
+  if (error || !data?.link) redirect(`/estates/${estateId}?payment=error#plan`);
+  redirect(data.link);
+}

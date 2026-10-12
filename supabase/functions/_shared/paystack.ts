@@ -16,6 +16,15 @@ export function isProduct(x: unknown): x is Product {
   return typeof x === "string" && x in PRODUCTS;
 }
 
+/** Estate plan: priced per unit per month (admin setting), at least ESTATE_MIN_UNITS. 12 months = 10 months' price. */
+export const ESTATE_MIN_UNITS = 10;
+export const ESTATE_PRODUCTS = { estate_30: { months: 1, days: 30, title: "Estate plan, 30 days" }, estate_365: { months: 10, days: 365, title: "Estate plan, 12 months" } } as const;
+export type EstateProduct = keyof typeof ESTATE_PRODUCTS;
+export const isEstateProduct = (x: unknown): x is EstateProduct => typeof x === "string" && x in ESTATE_PRODUCTS;
+
+/** A buyer's own independent checks on an estate unit. */
+export const INDEPENDENT = { product: "independent3", amount: 6000, title: "3 independent checks" } as const;
+
 async function paystack<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
@@ -69,8 +78,8 @@ export async function isValidSignature(rawBody: string, signature: string | null
 interface VerifiedTx { id: number; reference: string; status: string; amount: number; currency: string }
 
 export type SettleResult =
-  | { status: "successful"; applied: boolean; product: Product; propertyId: string }
-  | { status: "pending" | "failed" | "unknown"; propertyId?: string };
+  | { status: "successful"; applied: boolean; product: string; propertyId: string | null; estateId: string | null }
+  | { status: "pending" | "failed" | "unknown"; propertyId?: string | null; estateId?: string | null };
 
 /**
  * Re-verify a transaction with Paystack and apply it once.
@@ -96,5 +105,5 @@ export async function settle(db: SupabaseClient, reference: string): Promise<Set
 
   const { data: applied, error } = await db.rpc("apply_payment", { p_tx_ref: reference, p_provider_id: tx.id });
   if (error) throw new Error(error.message);
-  return { status: "successful", applied: Boolean(applied), product: pay.product, propertyId: pay.property_id };
+  return { status: "successful", applied: Boolean(applied), product: pay.product, propertyId: pay.property_id, estateId: pay.estate_id ?? null };
 }

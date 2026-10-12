@@ -75,6 +75,12 @@ Deno.serve(async (req) => {
     await db.from("app_settings").upsert({ key: "matched_visits_free", value: body.value === true, updated_at: new Date().toISOString() });
     return json({ ok: true });
   }
+  if (body.action === "set_setting" && body.key === "estate_unit_price_ngn") {
+    const n = Math.round(Number(body.value));
+    if (!(n >= 100 && n <= 1_000_000)) return json({ error: "Enter a price per unit per month in naira." }, 400);
+    await db.from("app_settings").upsert({ key: "estate_unit_price_ngn", value: n, updated_at: new Date().toISOString() });
+    return json({ ok: true });
+  }
   const { data: freeRow } = await db.from("app_settings").select("value").eq("key", "matched_visits_free").maybeSingle();
   const matchedFree = freeRow ? freeRow.value === true : true;
 
@@ -156,6 +162,17 @@ Deno.serve(async (req) => {
     if (!ownerName || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail) || !reporterId || !VISIT[visitType] || !FREQ[frequency] || !(price > 0)) {
       return json({ error: "Fill in the owner, reporter, visit type, how often and the price." }, 400);
     }
+    // A buyer's independent check on an estate unit: the unit comes from the request, and the buyer must be watching it.
+    const { data: req0 } = requestId ? await db.from("ground_requests").select("kind, property_id").eq("id", requestId).maybeSingle() : { data: null };
+    const independent = req0?.kind === "independent" && Boolean(req0.property_id);
+    let buyerId: string | null = null;
+    if (independent) {
+      buyerId = await userIdByEmail(db, ownerEmail);
+      const { data: watching } = buyerId
+        ? await db.from("property_members").select("role").eq("property_id", req0!.property_id).eq("user_id", buyerId).maybeSingle()
+        : { data: null };
+      if (watching?.role !== "viewer") return json({ error: "That buyer isn't watching the unit any more." }, 400);
+    }
     const { data: prof } = await db.from("reporter_profiles").select("display_name, state, suspended").eq("user_id", reporterId).maybeSingle();
     if (!prof) return json({ error: "That reporter hasn't made a profile yet." }, 400);
     if (prof.suspended) return json({ error: "That reporter is suspended." }, 400);
@@ -164,8 +181,11 @@ Deno.serve(async (req) => {
       return json({ error: `In ${prof.state} a ${VISIT[visitType].toLowerCase()} is ${ngn(band.min_ngn)} to ${ngn(band.max_ngn)}.` }, 400);
     }
     let propertyLabel: string | null = null;
-    let linkedId = propertyId;
-    if (!linkedId) {
+    let linkedId = independent ? req0!.property_id as string : propertyId;
+    if (independent) {
+      const { data: unit } = await db.from("properties").select("label").eq("id", linkedId).maybeSingle();
+      propertyLabel = unit?.label ?? null;
+    } else if (!linkedId) {
       // Owner already has exactly one property? Link it, so there's nothing for them to do.
       const ownerId = await userIdByEmail(db, ownerEmail);
       if (ownerId) {
@@ -173,7 +193,7 @@ Deno.serve(async (req) => {
         if (own?.length === 1) { linkedId = own[0].id; propertyLabel = own[0].label; }
       }
     }
-    if (propertyId) {
+    if (propertyId && !independent) {
       const { data: prop } = await db.from("properties").select("label, owner_id").eq("id", propertyId).maybeSingle();
       const { data: ou } = prop ? await db.auth.admin.getUserById(prop.owner_id) : { data: { user: null } };
       if (!prop || ou.user?.email?.toLowerCase() !== ownerEmail) return json({ error: "That property doesn't belong to that owner's email." }, 400);
@@ -182,6 +202,7 @@ Deno.serve(async (req) => {
     const { data: m, error } = await db.from("matches").insert({
       request_id: requestId, owner_name: ownerName, owner_email: ownerEmail, reporter_id: reporterId,
       property_id: linkedId, visit_type: visitType, price_ngn: price, frequency, notes,
+      kind: independent ? "independent" : "owner", buyer_id: buyerId,
     }).select("id").single();
     if (error || !m) return json({ error: error?.message ?? "Couldn't save the match." }, 500);
     if (requestId) await db.from("ground_requests").update({ status: "matched" }).eq("id", requestId);
@@ -202,7 +223,9 @@ Deno.serve(async (req) => {
     const rules = `<ul style="margin:0 0 18px;padding-left:20px;font-size:15px;line-height:1.6">
 <li>The price above is the full price. No extra charges (transport, data, "logistics") unless the owner agrees in writing first.</li>
 <li>Every visit is done in the Groundproof app at the property, so it can be verified.</li>
-${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these visits. The owner pays the reporter only.</li>" : "<li>The owner's Groundproof plan or check-ins cover the verification of each visit. The reporter's price above is separate.</li>"}
+${independent
+  ? `<li>This is an independent check on the buyer's unit. The reporter works for the buyer, not the developer, and reports only what they see.</li>${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these visits. The buyer pays the reporter only.</li>" : "<li>The buyer's independent checks on Groundproof cover the verification of each visit. The reporter's price above is separate.</li>"}`
+  : matchedFree ? "<li>During the pilot, Groundproof's checks are free on these visits. The owner pays the reporter only.</li>" : "<li>The owner's Groundproof plan or check-ins cover the verification of each visit. The reporter's price above is separate.</li>"}
 <li>For 12 months from this introduction, all visits between you are arranged and done through Groundproof, not around it. That keeps every visit verified, and keeps the reporter's record growing.</li>
 <li>Any problem, just reply to this email.</li></ul>`;
     const mail = (to: string, intro: string) => key && from ? fetch("https://api.resend.com/emails", {
@@ -222,6 +245,18 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
         : `Next: <a href="${SITE}/properties/new">add your property on Groundproof</a> (sign in with this email). We'll link it and send ${esc(prof.display_name.split(" ")[0])} the invite code.`}`),
       reporterEmail ? mail(reporterEmail, `You've been matched with <b>${esc(ownerName)}</b>. Here's what you've agreed. ${invited === "sent" ? "Your invite code is in a separate email." : invited === "already" ? "You're already on the property: check in from the app." : "We'll email you the invite code as soon as the property is set up."}`) : Promise.resolve(),
     ]);
+    // Tell the developer: the reporter will need access to the site.
+    if (independent && linkedId) {
+      const { data: unit } = await db.from("properties").select("owner_id, label, estates(name)").eq("id", linkedId).maybeSingle();
+      const { data: dev } = unit ? await db.auth.admin.getUserById(unit.owner_id) : { data: { user: null } };
+      const estateName = (unit as { estates?: { name: string } | null } | null)?.estates?.name ?? "your estate";
+      if (dev.user?.email) {
+        await sendMail(dev.user.email, `Independent check on ${unit!.label}`, `<h1 style="margin:0 0 14px;font-size:22px">An independent reporter is joining ${esc(unit!.label)}</h1>
+<p style="margin:0 0 14px">The buyer of <b>${esc(unit!.label)}</b> at ${esc(estateName)} has asked Groundproof for independent checks on their unit. <b>${esc(prof.display_name)}</b> will visit ${esc(FREQ[frequency])}, using the Groundproof app like your own site reporter.</p>
+<p style="margin:0 0 14px">Please let them onto the site when they arrive. Their visits appear on the unit alongside yours, and they don't use your estate plan: the buyer covers them.</p>
+<p style="margin:0">Questions? Reply to this email.</p>`, admins[0]);
+      }
+    }
     return json({ ok: true, id: m.id, linked: Boolean(linkedId), invited });
   }
   if (body.action === "approve_developer" && body.user_id) {
@@ -253,7 +288,7 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
     db.from("waitlist").select("email, plan, created_at").order("created_at", { ascending: false }).limit(500),
   ]);
   const [{ data: groundRequests }, { data: reporterApps }, { data: profiles }, { data: developers }, { data: estates }, { data: bands }, { data: matches }, { data: rates }] = await Promise.all([
-    db.from("ground_requests").select("id, name, email, phone, state, area, property_type, frequency, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
+    db.from("ground_requests").select("id, name, email, phone, state, area, property_type, frequency, notes, status, created_at, kind, property_id").order("created_at", { ascending: false }).limit(100),
     db.from("reporter_applications").select("id, name, email, phone, state, areas, occupation, android, notes, status, created_at").order("created_at", { ascending: false }).limit(100),
     db.from("reporter_profiles").select("user_id, slug, display_name, state, areas, is_public, suspended, agreed_rules_at"),
     db.from("developers").select("user_id, company, website, phone, approved, created_at").order("created_at", { ascending: false }),
@@ -329,7 +364,7 @@ ${matchedFree ? "<li>During the pilot, Groundproof's checks are free on these vi
       estates: (estates ?? []).filter((e) => e.developer_id === d.user_id).length,
       units: P.filter((p) => p.owner_id === d.user_id && (p as { estate_id?: string | null }).estate_id).length,
     })),
-    settings: { matchedVisitsFree: matchedFree },
+    settings: { matchedVisitsFree: matchedFree, estateUnitPrice: Number((await db.rpc("estate_unit_price")).data ?? 2000) },
     referrals: (referralRows ?? []).map((r) => ({
       referrer: emails.get(r.referrer_id) ?? "(deleted)", friend: emails.get(r.referred_id) ?? "(deleted)",
       joined: r.created_at, rewarded: r.rewarded_at, capped: r.referrer_capped,

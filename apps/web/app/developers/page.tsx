@@ -49,7 +49,7 @@ export default async function Developers() {
       ) : (
         <DeveloperApplyForm />
       )}
-      <p className="small muted" style={{ marginTop: "1.5rem" }}>Free during the pilot. We approve developer accounts by hand to keep the service trustworthy.</p>
+      <p className="small muted" style={{ marginTop: "1.5rem" }}>Every unit starts with 5 free check-ins. After that, one estate plan covers unlimited visits on every unit, priced per unit per month. Buyers always watch free. We approve developer accounts by hand to keep the service trustworthy.</p>
     </main>
   );
 }

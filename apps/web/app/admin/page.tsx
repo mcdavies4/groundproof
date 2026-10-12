@@ -67,6 +67,11 @@ async function setMatchedFree(on: boolean) {
   await adminAction({ action: "set_setting", key: "matched_visits_free", value: on });
   redirect(`/admin?notice=${encodeURIComponent(on ? "ok:Matched visits are free again." : "ok:Free pilot ended. Matched visits now use the owner's credits or plan.")}`);
 }
+async function setEstatePrice(form: FormData) {
+  "use server";
+  const r = await adminAction({ action: "set_setting", key: "estate_unit_price_ngn", value: Number(form.get("price")) });
+  redirect(`/admin?notice=${encodeURIComponent(r.ok ? "ok:Estate plan price saved." : `error:${r.error}`)}`);
+}
 async function endMatch(id: string) {
   "use server";
   await adminAction({ action: "end_match", match_id: id });
@@ -92,7 +97,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { noti
   return (
     <AdminView
       s={s} approve={approveDeveloper} suspend={suspendReporter} notice={searchParams.notice}
-      pricing={{ setBand, deleteBand, createMatch, endMatch, setMatchedFree }}
+      pricing={{ setBand, deleteBand, createMatch, endMatch, setMatchedFree, setEstatePrice }}
       nudge={nudgeUser} show={searchParams.show}
       todo={{ introduce: createMatch, review: reviewApplication, link: linkMatch, close: closeRequest }}
     />
