@@ -3,6 +3,7 @@
 //   invite       1+ day after adding a property, nobody on the ground yet
 //   anchor       3+ days after adding it, still not anchored
 //   first_visit  7+ days after anchoring, no check-in since and no open request
+//   reporters    approved reporters stuck 48+ hours at a step (approved, signed_in, profile, matched, joined), once per step, from Emeka
 //   signed_up    1+ day after signing up on the website with no property yet (once, within 14 days; from Emeka)
 // Only properties added (or anchored) in the last 21 days, so older properties never get a burst.
 // Each nudge goes once per property; owners can turn them off on their account page.
@@ -12,6 +13,7 @@ import { adminClient } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
 import { allUsers, nudgeEmail, pilotPeople } from "../_shared/pilot.ts";
 import { sendReferralNotices } from "../_shared/growth.ts";
+import { NUDGE_STAGES, reporterNudgeEmail, reporterPeople } from "../_shared/reporters.ts";
 
 const DAY = 86_400_000;
 const WINDOW = 21 * DAY;
@@ -60,11 +62,37 @@ Deno.serve(async (req) => {
     return out;
   }
 
+  // Approved reporters who've stalled in onboarding: one email per step, after 48 hours there.
+  const reporterDue = (await reporterPeople(db, await allUsers(db)))
+    .filter((r) => r.stuck && (NUDGE_STAGES as readonly string[]).includes(r.stage) && !r.nudged[r.stage]);
+
+  async function sendReporterNudges() {
+    const key = Deno.env.get("RESEND_API_KEY"), from = Deno.env.get("ALERT_FROM");
+    const site = Deno.env.get("SITE_URL") ?? "https://groundproof.site";
+    const replyTo = (Deno.env.get("ADMIN_EMAILS") ?? "").split(",").map((x) => x.trim()).filter(Boolean)[0];
+    const out: unknown[] = [];
+    if (!key || !from) return out;
+    for (const r of reporterDue) {
+      const { data: claimed } = await db.from("reporter_nudges").upsert({ email: r.email.toLowerCase(), stage: r.stage, auto: true }, { onConflict: "email,stage", ignoreDuplicates: true }).select("email");
+      if (!claimed?.length) continue;
+      const mail = reporterNudgeEmail(r, site);
+      if (!mail) continue;
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [r.email], ...(replyTo ? { reply_to: replyTo } : {}), subject: mail.subject, html: mail.html }),
+      }).catch(() => null);
+      out.push({ reporter: r.email, kind: r.stage, ok: Boolean(res?.ok) });
+    }
+    return out;
+  }
+  const reporterDry = () => reporterDue.map((r) => ({ reporter: r.email, kind: r.stage }));
+
   const { data: props } = await db.from("properties").select("id, owner_id, label, created_at, anchored_at").gte("created_at", since).is("estate_id", null).eq("kind", "building");  // not estate units or plots
   const P = props ?? [];
   if (!P.length) {
-    if (dry_run) return json({ checked: 0, due: signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" })) });
-    return json({ checked: 0, sent: await sendSignupNudges() });
+    if (dry_run) return json({ checked: 0, due: [...signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" })), ...reporterDry()] });
+    return json({ checked: 0, sent: [...await sendSignupNudges(), ...await sendReporterNudges()] });
   }
   const ids = P.map((p) => p.id);
 
@@ -96,7 +124,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (dry_run) return json({ checked: P.length, due: [...due.map((d) => ({ property: d.p.label, kind: d.kind })), ...signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" }))] });
+  if (dry_run) return json({ checked: P.length, due: [...due.map((d) => ({ property: d.p.label, kind: d.kind })), ...signupNudges.map((p) => ({ signup: p.email, kind: "signed_up" })), ...reporterDry()] });
 
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("ALERT_FROM");
@@ -157,6 +185,6 @@ Deno.serve(async (req) => {
     if (!res.ok) console.error("nudge failed", res.status, await res.text());
     results.push({ property: p.label, kind, ok: res.ok });
   }
-  results.push(...await sendSignupNudges());
+  results.push(...await sendSignupNudges(), ...await sendReporterNudges());
   return json({ checked: P.length, sent: results });
 });

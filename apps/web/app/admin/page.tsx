@@ -82,6 +82,11 @@ async function nudgeUser(userId: string) {
   const r = await adminAction({ action: "nudge_user", user_id: userId });
   redirect(`/admin?show=stuck&notice=${encodeURIComponent(r.ok ? "ok:Nudge sent. Replies come to your inbox." : `error:${r.error}`)}#pilot`);
 }
+async function nudgeReporter(email: string) {
+  "use server";
+  const r = await adminAction({ action: "nudge_reporter", email });
+  redirect(`/admin?show=r-stuck&notice=${encodeURIComponent(r.ok ? "ok:Nudge sent. Replies come to your inbox." : `error:${r.error}`)}#reporters`);
+}
 async function suspendReporter(userId: string, on: boolean) {
   "use server";
   await adminAction({ action: "suspend_reporter", user_id: userId, suspended: on });
@@ -98,7 +103,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { noti
     <AdminView
       s={s} approve={approveDeveloper} suspend={suspendReporter} notice={searchParams.notice}
       pricing={{ setBand, deleteBand, createMatch, endMatch, setMatchedFree, setEstatePrice }}
-      nudge={nudgeUser} show={searchParams.show}
+      nudge={nudgeUser} nudgeReporter={nudgeReporter} show={searchParams.show}
       todo={{ introduce: createMatch, review: reviewApplication, link: linkMatch, close: closeRequest }}
     />
   );

@@ -4,6 +4,7 @@ import { cors, json } from "../_shared/cors.ts";
 import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { esc } from "../_shared/email.ts";
 import { allUsers, nudgeEmail, pilotPeople, STAGES } from "../_shared/pilot.ts";
+import { reporterNudgeEmail, reporterPeople } from "../_shared/reporters.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const PLAY = "https://play.google.com/store/apps/details?id=ng.the36th.groundproof";
@@ -102,6 +103,23 @@ Deno.serve(async (req) => {
     await db.from("pilot_nudges").upsert({ user_id: person.id, stage: person.stage, sent_at: new Date().toISOString(), auto: false });
     return json({ ok: true, stage: person.stage });
   }
+  if (body.action === "nudge_reporter" && body.email) {
+    const users = await allUsers(db);
+    const person = (await reporterPeople(db, users)).find((r) => r.email.toLowerCase() === String(body.email).toLowerCase());
+    if (!person) return json({ error: "That isn't an approved reporter." }, 404);
+    const mail = reporterNudgeEmail(person, SITE);
+    if (!mail) return json({ error: person.stage === "active" ? "They've already done a visit." : "They're ready and waiting for an introduction, so there's nothing to nudge." }, 400);
+    const admins = (Deno.env.get("ADMIN_EMAILS") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (!key || !from) return json({ error: "Email isn't set up (RESEND_API_KEY / ALERT_FROM)." }, 500);
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [person.email], reply_to: admins[0], subject: mail.subject, html: mail.html }),
+    }).catch(() => null);
+    if (!res?.ok) return json({ error: "The email didn't send. Try again." }, 502);
+    await db.from("reporter_nudges").upsert({ email: person.email.toLowerCase(), stage: person.stage, sent_at: new Date().toISOString(), auto: false });
+    return json({ ok: true, stage: person.stage });
+  }
   if (body.action === "set_band") {
     const state = String(body.state ?? "").trim(), visitType = String(body.visit_type ?? "");
     const min = Math.round(Number(body.min_ngn)), max = Math.round(Number(body.max_ngn));
@@ -127,7 +145,7 @@ Deno.serve(async (req) => {
     return json({ ok: true, invited });
   }
   if (body.action === "review_application" && body.id && (body.decision === "approved" || body.decision === "declined")) {
-    const { data: app } = await db.from("reporter_applications").update({ status: body.decision }).eq("id", String(body.id)).select("name, email, state").maybeSingle();
+    const { data: app } = await db.from("reporter_applications").update({ status: body.decision, ...(body.decision === "approved" ? { approved_at: new Date().toISOString() } : {}) }).eq("id", String(body.id)).select("name, email, state").maybeSingle();
     if (!app) return json({ error: "Application not found." }, 404);
     if (body.decision === "approved") {
       await sendMail(app.email, "You're approved as a Groundproof reporter", `<h1 style="margin:0 0 14px;font-size:22px">Welcome, ${esc(app.name.split(" ")[0])}</h1>
@@ -309,6 +327,7 @@ ${independent
   const emails = new Map<string, string>();
   for (const u of users) if (u.email) emails.set(u.id, u.email);
   const pilot = await pilotPeople(db, users);
+  const reporterFunnel = await reporterPeople(db, users);
 
   const P = props ?? [], C = checkins ?? [], M = members ?? [], Pay = payments ?? [], W = waitlist ?? [];
   const byProp = new Map<string, typeof C>();
@@ -382,6 +401,7 @@ ${independent
         return acc;
       }, {} as Record<string, { source: string; signedUp: number; added: number; verified: number; last7: number }>)).sort((a, b) => b.signedUp - a.signedUp),
     },
+    reporterFunnel,
     bands: bands ?? [],
     // Each owner's own properties (not estate units), for linking matches.
     ownerProperties: (() => {

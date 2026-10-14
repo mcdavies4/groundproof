@@ -4,6 +4,7 @@ import type { Verdict } from "@/lib/types";
 import { AdminPricing, type Band, type Match, type PricingActions } from "./AdminPricing";
 import { AdminTodo, type TodoActions } from "./AdminTodo";
 import { AdminPilot, type PilotData } from "./AdminPilot";
+import { AdminReporters, type ReporterPerson } from "./AdminReporters";
 import { AdminGrowth, type GrowthData } from "./AdminGrowth";
 
 export interface Stats {
@@ -30,6 +31,7 @@ export interface Stats {
   developers?: { user_id: string; company: string; website: string | null; phone: string | null; approved: boolean; created_at: string; email: string; estates: number; units: number }[];
   settings?: { matchedVisitsFree: boolean; estateUnitPrice?: number };
   pilot?: PilotData;
+  reporterFunnel?: ReporterPerson[];
   referrals?: GrowthData["referrals"];
   feedback?: GrowthData["feedback"];
   bands?: Band[];
@@ -45,9 +47,9 @@ const naira = new Intl.NumberFormat("en-GB", { style: "currency", currency: "NGN
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "–");
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, show }: {
+export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, nudgeReporter, show }: {
   s: Stats; approve?: (userId: string) => Promise<void>; pricing?: PricingActions; todo?: TodoActions;
-  nudge?: (userId: string) => Promise<void>; show?: string;
+  nudge?: (userId: string) => Promise<void>; nudgeReporter?: (email: string) => Promise<void>; show?: string;
   suspend?: (userId: string, on: boolean) => Promise<void>; notice?: string;
 }) {
   const t = s.totals;
@@ -63,7 +65,8 @@ export function AdminView({ s, approve, pricing, suspend, notice, todo, nudge, s
 
       {notice && !pricing && <p className="notice">{notice.replace(/^(error|ok):/, "")}</p>}
       {todo && <AdminTodo s={s} actions={todo} />}
-      {s.pilot && nudge && <AdminPilot data={s.pilot} nudge={nudge} show={show} notice={show ? notice : undefined} />}
+      {s.pilot && nudge && <AdminPilot data={s.pilot} nudge={nudge} show={show} notice={show && !show.startsWith("r-") ? notice : undefined} />}
+      {s.reporterFunnel && nudgeReporter && <AdminReporters people={s.reporterFunnel} nudge={nudgeReporter} show={show} notice={show?.startsWith("r-") ? notice : undefined} />}
       {(s.referrals || s.feedback) && <AdminGrowth referrals={s.referrals ?? []} feedback={s.feedback ?? []} />}
 
       <section className="admin-tiles" aria-label="Totals">
