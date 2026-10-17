@@ -11,7 +11,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ledasnnmshmfsnlbubwa.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "PASTE_YOUR_ANON_KEY",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZGFzbm5tc2htZnNubGJ1YndhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMzc5OTAsImV4cCI6MjEwNjYxMzk5MH0.FCOZu4D2ux6ngQb5K_HvR7tAkKmgdn8JMK3uxC1Hdaw",
         "EXPO_PUBLIC_SITE_URL": "https://groundproof.site"
       }
     },
@@ -22,7 +22,7 @@
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://ledasnnmshmfsnlbubwa.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "PASTE_YOUR_ANON_KEY",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlZGFzbm5tc2htZnNubGJ1YndhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMzc5OTAsImV4cCI6MjEwNjYxMzk5MH0.FCOZu4D2ux6ngQb5K_HvR7tAkKmgdn8JMK3uxC1Hdaw",
         "EXPO_PUBLIC_SITE_URL": "https://groundproof.site"
       }
     }

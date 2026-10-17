@@ -84,18 +84,39 @@ export default function CheckIn() {
   const videoRequired = !isAnchor && Boolean(property?.require_video);
   const showCam = !videoOpen ? shots.length < MAX_PHOTOS : !video;
 
+  // Resolves when the camera reports it's ready, or after `ms` whichever is first (older phones can be slow to switch modes).
+  const camReady = useRef<(() => void) | null>(null);
+  function waitForCamera(ms: number) {
+    return new Promise<void>((resolve) => {
+      const t = setTimeout(() => { camReady.current = null; resolve(); }, ms);
+      camReady.current = () => { clearTimeout(t); camReady.current = null; resolve(); };
+    });
+  }
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   async function recordVideo() {
     if (!cam.current) return;
     setError(null);
     setCamMode("video");
-    await new Promise((r) => setTimeout(r, 600));          // let the camera switch to video
+    await waitForCamera(3000);                              // let the camera switch to video
+    await sleep(500);
     setRecording(true); setSecs(0);
     const tick = setInterval(() => setSecs((x) => x + 1), 1000);
     try {
-      const r = await cam.current.recordAsync({ maxDuration: VIDEO_SECONDS });
+      const started = Date.now();
+      let r;
+      try {
+        r = await cam.current.recordAsync({ maxDuration: VIDEO_SECONDS });
+      } catch (first) {
+        // Failing straight away usually means the camera wasn't ready yet: give it a moment and try once more.
+        if (Date.now() - started > 2500) throw first;
+        await sleep(1000);
+        r = await cam.current.recordAsync({ maxDuration: VIDEO_SECONDS });
+      }
       if (r?.uri) { setVideo(r.uri); setVideoOpen(false); }
+      else setError("The video didn't save. Try again, and make sure the phone has some free storage.");
     } catch (e) {
-      setError(`Couldn't record the video: ${(e as Error).message}`);
+      setError(`Couldn't record the video: ${(e as Error).message}. Try again; if it keeps happening, email the36thltd@outlook.com with this message.`);
     } finally {
       clearInterval(tick);
       setRecording(false);
@@ -407,6 +428,7 @@ export default function CheckIn() {
           <CameraView
             ref={cam} style={{ flex: 1 }} facing="back"
             mode={camMode} mute videoQuality="480p" videoBitrate={1_500_000}
+            onCameraReady={() => camReady.current?.()}
           />
           {recording && (
             <View style={{ position: "absolute", top: 12, left: 12, backgroundColor: c.flagged, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 }}>
