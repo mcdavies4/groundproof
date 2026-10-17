@@ -19,6 +19,14 @@ function rememberSource(request: NextRequest, response: NextResponse) {
   if (ref && !request.cookies.get("gp_ref")) response.cookies.set("gp_ref", ref, opts);
   if (request.cookies.get("gp_src")) return response;
 
+  // Someone opening a link an owner shared (a property or estate report) is credited to that channel.
+  const path0 = request.nextUrl.pathname;
+  if (!q.get("utm_source") && !q.get("src") && !ref && (path0.startsWith("/r/") || path0.startsWith("/e/"))) {
+    response.cookies.set("gp_src", "shared-report", opts);
+    response.cookies.set("gp_land", "/r/…", opts);
+    return response;
+  }
+
   let src = (q.get("utm_source") ?? q.get("src") ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
   if (!src && ref) src = "referral";
   if (!src) {
