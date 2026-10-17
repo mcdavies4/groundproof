@@ -6,6 +6,21 @@ import { supabase } from "@/lib/supabase";
 import { s } from "@/lib/theme";
 import { Button } from "@/lib/ui";
 
+/** Plain-language reasons the code couldn't be sent, so people know whether to wait, check their signal or tell us. */
+function friendly(e: { message: string; status?: number; code?: string }): string {
+  const m = e.message.toLowerCase();
+  if (m.includes("rate limit") || m.includes("security purposes") || e.status === 429) {
+    return "Too many codes have been requested just now. Wait a minute or two, then try again. If it keeps happening, email the36thltd@outlook.com.";
+  }
+  if (m.includes("network") || m.includes("fetch") || m.includes("timeout")) {
+    return "Couldn't reach Groundproof. Check your data or Wi-Fi and try again.";
+  }
+  if (m.includes("email") && (m.includes("invalid") || m.includes("valid"))) {
+    return "That email address doesn't look right. Check it and try again.";
+  }
+  return "We couldn't send your code just now. Try again in a minute. If it keeps happening, email the36thltd@outlook.com and tell us the time and your email address.";
+}
+
 export default function SignIn() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [email, setEmail] = useState("");
@@ -27,7 +42,7 @@ export default function SignIn() {
     setBusy(true); setError(null);
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase() });
     setBusy(false);
-    if (error) setError(error.message); else setSent(true);
+    if (error) setError(friendly(error)); else setSent(true);
   }
 
   async function verify() {
