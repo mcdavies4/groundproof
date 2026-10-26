@@ -4,7 +4,7 @@ import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { DOC_KINDS, formatMoney, type Checkin, type Milestone, type Property, type PropertyDocument } from "@/lib/types";
-import { addMilestone, cancelRequest, createInvite, deleteDocument, recheckDocument, requestAudit, requestCheckin, uploadDocument, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, cancelRequest, createInvite, deleteDocument, recheckDocument, requestAudit, requestCheckin, runSatelliteCheck, uploadDocument, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -22,7 +22,7 @@ export default async function PropertyPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { payment?: string; viewer?: string; request?: string; independent?: string };
+  searchParams: { payment?: string; viewer?: string; request?: string; independent?: string; sat?: string };
 }) {
   const { supabase, user } = await requireUser();
   if (!user) redirect("/login");
@@ -291,6 +291,34 @@ export default async function PropertyPage({
           </div>
 
           </>}
+
+          {isOwner && (property.anchored_at !== null || (property.beacons ?? []).length > 0) && (
+            <div className="panel" id="satellite">
+              <h3>Satellite look</h3>
+              <p className="small muted">
+                Compares free Sentinel-2 satellite images of this spot, taken months apart, and tells you whether the vegetation changed a lot. It can show
+                land being cleared or built on. It can&apos;t see a roof or a room (each pixel is 10 metres), and clouds often hide Nigeria in the rainy season.
+                It is a hint only and never changes a visit&apos;s result.
+              </p>
+              {searchParams?.sat && <p className="small" style={{ color: "var(--review)" }}>{searchParams.sat}</p>}
+              {property.satellite_result && (
+                <p style={{ fontWeight: 600, color: property.satellite_result.change === "cleared" ? "var(--review)" : undefined }}>
+                  {property.satellite_result.message}
+                  <span className="small muted" style={{ display: "block", fontWeight: 400 }}>
+                    Checked {property.satellite_checked_at ? new Date(property.satellite_checked_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : ""}
+                  </span>
+                </p>
+              )}
+              <form action={runSatelliteCheck.bind(null, property.id)} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                <select name="days_back" defaultValue="365" className="input" style={{ width: "auto" }}>
+                  <option value="365">Compare with a year ago</option>
+                  <option value="180">Compare with 6 months ago</option>
+                  <option value="90">Compare with 3 months ago</option>
+                </select>
+                <button type="submit" className="btn">{property.satellite_result ? "Run again" : "Run the check"}</button>
+              </form>
+            </div>
+          )}
 
           {isOwner && (
             <div className="panel" id="documents">

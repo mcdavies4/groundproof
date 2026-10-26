@@ -131,6 +131,20 @@ export async function requestAudit(propertyId: string, checkinId: string) {
   redirect(`/properties/${propertyId}?request=${encodeURIComponent(msg)}#ground`);
 }
 
+export async function runSatelliteCheck(propertyId: string, form: FormData) {
+  const supabase = createClient();
+  const daysBack = Number(form.get("days_back")) || 365;
+  const { error } = await supabase.functions.invoke("satellite-check", { body: { property_id: propertyId, days_back: daysBack } });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const body = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
+    revalidatePath(`/properties/${propertyId}`);
+    redirect(`/properties/${propertyId}?sat=${encodeURIComponent(body?.error ?? "Couldn't run the satellite check. Try again.")}#satellite`);
+  }
+  revalidatePath(`/properties/${propertyId}`);
+  redirect(`/properties/${propertyId}#satellite`);
+}
+
 export async function cancelRequest(propertyId: string, requestId: string) {
   const supabase = createClient();
   await supabase.rpc("cancel_checkin_request", { p_request: requestId });

@@ -25,6 +25,8 @@ export interface Property {
   estate_id?: string | null;
   kind?: "building" | "plot";
   beacons?: { label: string; lat: number; lng: number }[] | null;
+  satellite_result?: { ok: boolean; change?: "cleared" | "greener" | "no_clear_change"; message: string; beforeDate?: string; afterDate?: string; daysBack?: number } | null;
+  satellite_checked_at?: string | null;
 }
 
 export interface Milestone {
