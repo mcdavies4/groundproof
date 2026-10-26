@@ -1,4 +1,4 @@
-// POST {} -> permanently deletes the caller's account, their properties and those properties' photos.
+// POST {} -> permanently deletes the caller's account, their properties, those properties' photos and uploaded documents.
 import { cors, json } from "../_shared/cors.ts";
 import { adminClient, getCaller } from "../_shared/supabase.ts";
 
@@ -22,6 +22,13 @@ Deno.serve(async (req) => {
         if (paths.length) await db.storage.from(bucket).remove(paths);
       }
     }
+  }
+
+  // Uploaded documents (survey plans, C of O, deeds): <property_id>/<document_id>.<ext>, one level deep.
+  for (const p of owned ?? []) {
+    const { data: docs } = await db.storage.from("property-docs").list(p.id, { limit: 1000 });
+    const paths = (docs ?? []).map((x) => `${p.id}/${x.name}`);
+    if (paths.length) await db.storage.from("property-docs").remove(paths);
   }
 
   // Removes the auth user; database cascades remove owned properties, memberships and stages.

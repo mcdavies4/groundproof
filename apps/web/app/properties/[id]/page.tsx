@@ -2,8 +2,9 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
-import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, cancelRequest, createInvite, requestAudit, requestCheckin, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { DocumentUpload } from "@/components/DocumentUpload";
+import { DOC_KINDS, formatMoney, type Checkin, type Milestone, type Property, type PropertyDocument } from "@/lib/types";
+import { addMilestone, cancelRequest, createInvite, deleteDocument, recheckDocument, requestAudit, requestCheckin, uploadDocument, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -44,7 +45,7 @@ export default async function PropertyPage({
       ])
     : [{ data: null }, { data: null }, true];
 
-  const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }, { data: requests }, { count: reporterCount }] = await Promise.all([
+  const [{ data: milestones }, { data: checkins }, { data: invites }, { data: viewers }, { data: documents }, { data: requests }, { count: reporterCount }] = await Promise.all([
     supabase.from("milestones").select("*").eq("property_id", property.id).order("sort"),
     supabase.from("checkins").select("*").eq("property_id", property.id).order("server_time", { ascending: false }).limit(50),
     isOwner
@@ -53,6 +54,9 @@ export default async function PropertyPage({
     isOwner
       ? supabase.from("viewer_invites").select("id, email, accepted_at").eq("property_id", property.id).order("created_at")
       : Promise.resolve({ data: [] as { id: string; email: string; accepted_at: string | null }[] }),
+    isOwner
+      ? supabase.from("property_documents").select("id, kind, status, findings, created_at, checked_at").eq("property_id", params.id).order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as PropertyDocument[] }),
     supabase.from("checkin_requests").select("id, note, due_by, created_at, fulfilled_at, cancelled_at, audit_of")
       .eq("property_id", property.id).order("created_at", { ascending: false }).limit(1),
     supabase.from("property_members").select("user_id", { count: "exact", head: true })
@@ -287,6 +291,45 @@ export default async function PropertyPage({
           </div>
 
           </>}
+
+          {isOwner && (
+            <div className="panel" id="documents">
+              <h3>Documents</h3>
+              <p className="small muted">
+                Upload the survey plan, Certificate of Occupancy or deed. Groundproof reads it and checks it for consistency: a plan number, a surveyor,
+                the area, the location, and whether the same plan is on another property. Only you can see your documents.
+              </p>
+              {((documents ?? []) as PropertyDocument[]).map((d) => (
+                <div key={d.id} style={{ borderTop: "1px solid var(--concrete)", paddingTop: "0.75rem", marginTop: "0.75rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <strong>{DOC_KINDS[d.kind]}</strong>
+                    <span className="small" style={{ fontWeight: 700, color: d.status === "consistent" ? "var(--verified)" : d.status === "pending" ? undefined : "var(--review)" }}>
+                      {d.status === "consistent" ? "Consistent" : d.status === "review" ? "Needs a look" : d.status === "unreadable" ? "Couldn't read it" : "Waiting for the check"}
+                    </span>
+                  </div>
+                  <p className="small muted" style={{ margin: "0.2rem 0 0" }}>Uploaded {new Date(d.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  {(d.findings ?? []).length > 0 && (
+                    <ul className="small" style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem" }}>
+                      {(d.findings ?? []).map((f, i) => (
+                        <li key={i} style={{ color: f.level === "warn" ? "var(--review)" : undefined }}>{f.text}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem" }}>
+                    <form action={recheckDocument.bind(null, property.id, d.id)}><button type="submit" className="link-btn">Check again</button></form>
+                    <form action={deleteDocument.bind(null, property.id, d.id)}><button type="submit" className="link-btn">Delete</button></form>
+                  </div>
+                </div>
+              ))}
+              <div style={{ marginTop: "1rem" }}>
+                <DocumentUpload upload={uploadDocument.bind(null, property.id)} />
+              </div>
+              <p className="small muted" style={{ marginTop: "0.75rem" }}>
+                This checks what the document says against itself and against this property. It can&apos;t tell you whether the document is genuine, and
+                it isn&apos;t a title search. Before you pay, have a lawyer search the land registry.
+              </p>
+            </div>
+          )}
 
           {isOwner && !estateId && <PlanPanel property={property} error={searchParams.payment === "error"} />}
           {isOwner && estate && (

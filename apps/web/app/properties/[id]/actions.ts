@@ -166,3 +166,50 @@ export async function requestIndependent(propertyId: string, form: FormData) {
   }
   redirect(`/properties/${propertyId}?independent=${encodeURIComponent(msg)}#independent`);
 }
+
+const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf" };
+const MAX_DOC_BYTES = 4_400_000;
+
+/** Called from the upload form with the (already shrunken) file. Stores it privately, then has it read and checked. */
+export async function uploadDocument(propertyId: string, form: FormData): Promise<{ error?: string }> {
+  const kind = String(form.get("kind") ?? "");
+  if (!["survey_plan", "c_of_o", "deed", "other"].includes(kind)) return { error: "Choose what kind of document it is." };
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file." };
+  const ext = DOC_TYPES[file.type];
+  if (!ext) return { error: "Upload a JPG, PNG or PDF." };
+  if (file.size > MAX_DOC_BYTES) return { error: "That file is too big. Use a PDF under 4 MB, or a photo." };
+
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { error: "Sign in again." };
+
+  const id = crypto.randomUUID();
+  const path = `${propertyId}/${id}.${ext}`;
+  const up = await supabase.storage.from("property-docs").upload(path, file, { contentType: file.type });
+  if (up.error) return { error: "Couldn't upload the file. Try again." };
+  const ins = await supabase.from("property_documents").insert({ id, property_id: propertyId, uploaded_by: auth.user.id, kind, file_path: path });
+  if (ins.error) {
+    await supabase.storage.from("property-docs").remove([path]);
+    return { error: "Couldn't save the document. Try again." };
+  }
+  const { error } = await supabase.functions.invoke("check-document", { body: { document_id: id } });
+  revalidatePath(`/properties/${propertyId}`);
+  return error ? { error: "Uploaded, but the check didn't run. Use \"Check again\" in a moment." } : {};
+}
+
+export async function recheckDocument(propertyId: string, docId: string) {
+  const supabase = createClient();
+  await supabase.functions.invoke("check-document", { body: { document_id: docId } });
+  revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function deleteDocument(propertyId: string, docId: string) {
+  const supabase = createClient();
+  const { data: doc } = await supabase.from("property_documents").select("file_path").eq("id", docId).eq("property_id", propertyId).maybeSingle();
+  if (doc) {
+    await supabase.storage.from("property-docs").remove([doc.file_path]);
+    await supabase.from("property_documents").delete().eq("id", docId);
+  }
+  revalidatePath(`/properties/${propertyId}`);
+}

@@ -24,6 +24,7 @@ export default function Privacy() {
         <li><strong>Property details you enter</strong>: a name for the property and its NIPOST postcode, plus the address details NIPOST returns for that postcode.</li>
         <li><strong>Check-in photos and videos</strong> taken inside the Groundproof app. The app can&apos;t upload photos or videos from your gallery.
           If there&apos;s no signal at the site, the visit is kept on the phone until it can upload.</li>
+        <li><strong>Property documents</strong> you choose to upload (a survey plan, Certificate of Occupancy or deed). Only you can see them, and they are deleted with the property or your account.</li>
         <li><strong>Plot checks</strong>: the corner points (beacons) and measurements from a survey plan you enter, and the positions recorded when each beacon is walked.</li>
         <li><strong>Precise location</strong>, read only at the moment a check-in photo is taken in the app. We don&apos;t track location in the background or at any other time.</li>
         <li><strong>Compass direction and time</strong> recorded with each photo.</li>
@@ -67,7 +68,7 @@ export default function Privacy() {
         <li><strong>Supabase</strong>: database, sign-in and photo storage.</li>
         <li><strong>Vercel</strong>: website hosting.</li>
         <li><strong>NIPOST</strong>: postcodes and photo locations are checked against the national postcode registry.</li>
-        <li><strong>Anthropic</strong>: check-in photos are sent to Anthropic&apos;s Claude AI to compare them with the property&apos;s earlier photos and describe visible progress.</li>
+        <li><strong>Anthropic</strong>: check-in photos are sent to Anthropic&apos;s Claude AI to compare them with the property&apos;s earlier photos and describe visible progress, and documents you upload are sent to it to be read and checked for consistency.</li>
         <li><strong>Paystack</strong>: payment processing.</li>
         <li><strong>Resend</strong>: sending emails.</li>
         <li><strong>Expo</strong>: building and delivering the mobile app, and its visit reminders.</li>

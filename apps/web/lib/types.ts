@@ -89,3 +89,14 @@ export function formatMoney(amount: number, currency: Currency) {
     maximumFractionDigits: currency === "NGN" ? 0 : 2,
   }).format(amount);
 }
+
+export interface DocFinding { level: "ok" | "warn" | "info"; text: string }
+export interface PropertyDocument {
+  id: string;
+  kind: "survey_plan" | "c_of_o" | "deed" | "other";
+  status: "pending" | "consistent" | "review" | "unreadable";
+  findings: DocFinding[] | null;
+  created_at: string;
+  checked_at: string | null;
+}
+export const DOC_KINDS = { survey_plan: "Survey plan", c_of_o: "Certificate of Occupancy", deed: "Deed", other: "Other document" } as const;
