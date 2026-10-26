@@ -8,7 +8,14 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 const MODEL = () => Deno.env.get("ANTHROPIC_MODEL") || "claude-haiku-4-5-20251001";
 
 export type PhotoMatch = "match" | "mismatch" | "unsure" | "unavailable";
-export interface PhotoCheck { match: PhotoMatch; reason: string | null; note: string | null }
+export interface PhotoCheck {
+  match: PhotoMatch; reason: string | null; note: string | null;
+  /** Do the photos fit the stage the owner is paying for? null when no stage was named. */
+  stage: { match: PhotoMatch; reason: string | null } | null;
+  /** Four-digit numbers Claude could read in the photos, when a challenge code was required. null otherwise. */
+  digits: string[] | null;
+}
+const NONE = { stage: null, digits: null } as const;
 
 function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -42,6 +49,16 @@ PREVIOUS photos, if any, are from the last verified visit. NEW photos were just 
 Respond with JSON only, no other text:
 {"same_building":"yes"|"no"|"unsure","reason":"<max 20 words>","progress_note":"<max 30 words>"}`;
 
+/** Extra questions, added to the compare prompt only when they apply. */
+const stagePrompt = (stage: string) => `
+3. The owner is paying for the stage "${stage}". Say whether the NEW photos fit that stage being under way or finished.
+   Answer "no" only when the photos clearly contradict it (for example "Roofing" but no roof, only walls or foundation).
+   Answer "unsure" when the photos don't show the part of the building that would tell.`;
+const CODE_PROMPT = `
+4. If a handwritten or printed number of exactly four digits is clearly visible in any NEW photo (for example on a sheet of paper), list it. Read only what is there; never guess digits.`;
+const jsonLine = (stage: boolean, code: boolean) =>
+  `{"same_building":"yes"|"no"|"unsure","reason":"<max 20 words>","progress_note":"<max 30 words>"${stage ? `,"stage_fits":"yes"|"no"|"unsure","stage_reason":"<max 20 words>"` : ""}${code ? `,"code_digits":["<4 digits>"]` : ""}}`;
+
 const DESCRIBE_PROMPT = `You check photos for a property-monitoring service in Nigeria.
 These are the ANCHOR photos of a building (front, left side, right side, street), taken when monitoring began.
 Write one short sentence for the owner describing the building's current state (e.g. stage of construction, storeys, roof, finish). Only describe what you can see.
@@ -51,10 +68,10 @@ Respond with JSON only, no other text:
 
 export async function checkPhotos(
   db: SupabaseClient,
-  args: { anchorPaths: string[]; previousPaths: string[]; newPaths: string[]; isAnchor: boolean },
+  args: { anchorPaths: string[]; previousPaths: string[]; newPaths: string[]; isAnchor: boolean; stageName?: string | null; wantCode?: boolean },
 ): Promise<PhotoCheck> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!key) return { match: "unavailable", reason: "Photo check not configured", note: null };
+  if (!key) return { match: "unavailable", reason: "Photo check not configured", note: null, ...NONE };
 
   try {
     const content: unknown[] = [];
@@ -63,12 +80,17 @@ export async function checkPhotos(
       content.push({ type: "text", text: DESCRIBE_PROMPT });
     } else {
       const anchor = await loadImages(db, args.anchorPaths.slice(0, 4));
-      if (anchor.length === 0) return { match: "unavailable", reason: "No anchor photos to compare", note: null };
+      if (anchor.length === 0) return { match: "unavailable", reason: "No anchor photos to compare", note: null, ...NONE };
       content.push({ type: "text", text: "ANCHOR photos:" }, ...anchor);
       const prev = await loadImages(db, args.previousPaths.slice(0, 2));
       if (prev.length) content.push({ type: "text", text: "PREVIOUS photos:" }, ...prev);
       content.push({ type: "text", text: "NEW photos:" }, ...(await loadImages(db, args.newPaths.slice(0, 4))));
-      content.push({ type: "text", text: COMPARE_PROMPT });
+      const stage = args.stageName?.trim() || null;
+      const base = COMPARE_PROMPT.slice(0, COMPARE_PROMPT.indexOf("\nRespond with JSON only"));
+      content.push({
+        type: "text",
+        text: `${base}${stage ? stagePrompt(stage) : ""}${args.wantCode ? CODE_PROMPT : ""}\n\nRespond with JSON only, no other text:\n${jsonLine(Boolean(stage), Boolean(args.wantCode))}`,
+      });
     }
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -82,7 +104,7 @@ export async function checkPhotos(
     });
     if (!res.ok) {
       console.error("claude error", res.status, await res.text());
-      return { match: "unavailable", reason: `Photo check failed (${res.status})`, note: null };
+      return { match: "unavailable", reason: `Photo check failed (${res.status})`, note: null, ...NONE };
     }
     const body = await res.json();
     const text: string = (body.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("");
@@ -90,14 +112,25 @@ export async function checkPhotos(
 
     const match: PhotoMatch =
       parsed.same_building === "yes" ? "match" : parsed.same_building === "no" ? "mismatch" : "unsure";
+    const stageName = args.stageName?.trim() || null;
+    const stage = !args.isAnchor && stageName
+      ? {
+          match: (parsed.stage_fits === "yes" ? "match" : parsed.stage_fits === "no" ? "mismatch" : "unsure") as PhotoMatch,
+          reason: typeof parsed.stage_reason === "string" ? parsed.stage_reason.slice(0, 200) : null,
+        }
+      : null;
+    const digits = args.wantCode && !args.isAnchor
+      ? (Array.isArray(parsed.code_digits) ? parsed.code_digits : []).map((d: unknown) => String(d).replace(/\D/g, "")).filter((d: string) => d.length === 4)
+      : null;
     return {
       match,
       reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 200) : null,
       note: typeof parsed.progress_note === "string" ? parsed.progress_note.slice(0, 300) : null,
+      stage, digits,
     };
   } catch (e) {
     console.error("photo check error", e);
-    return { match: "unavailable", reason: "Photo check failed", note: null };
+    return { match: "unavailable", reason: "Photo check failed", note: null, ...NONE };
   }
 }
 

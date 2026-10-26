@@ -6,7 +6,9 @@
 //    Anchor visits for properties without a postcode either confirm the postcode found on site
 //    or anchor to the exact coordinates.
 // 3. Compass: at least one photo should face roughly the way the anchor's front photo did.
-// 4. Photos: Claude compares the photos with the anchor photos and writes a progress note.
+// 4. Photos: Claude compares the photos with the anchor photos and writes a progress note. The same call
+//    checks the photos fit the stage being paid for, and reads the challenge code when the owner requires one.
+// 5. Plausibility: a reporter can't be in two far-apart places minutes apart, or at the exact same GPS point at two properties.
 // Location decides verified/flagged; compass and photos can only downgrade "verified" to "review".
 // Offline check-ins: photos taken with no signal wait on the phone and upload later. They're
 // accepted up to MAX_OFFLINE_MS after they were taken, and labelled "taken offline".
@@ -16,6 +18,7 @@ import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { nipost, NipostError, type ReverseData } from "../_shared/nipost.ts";
 import { checkPhotos, headingDiff, type PhotoCheck } from "../_shared/photocheck.ts";
 import { distanceM } from "../_shared/geo.ts";
+import { impossibleTravel } from "../_shared/plausibility.ts";
 import { alertOwner } from "../_shared/email.ts";
 import { maybeAskFeedback, sendReferralNotices } from "../_shared/growth.ts";
 
@@ -37,7 +40,7 @@ type Unit = NonNullable<ReverseData["unit"]>;
 interface Property {
   id: string; owner_id: string; label: string; postcode: string | null; anchored_at: string | null; anchor_front_heading: number | null;
   anchor_mode: "postcode" | "coordinates" | null; anchor_lat: number | null; anchor_lng: number | null;
-  nipost_suggested_postcode: string | null; require_video: boolean;
+  nipost_suggested_postcode: string | null; require_video: boolean; require_code: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -53,7 +56,7 @@ Deno.serve(async (req) => {
   const db = adminClient();
   const { data: c, error } = await db
     .from("checkins")
-    .select("*, properties(id, owner_id, label, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode, require_video)")
+    .select("*, properties(id, owner_id, label, postcode, anchored_at, anchor_front_heading, anchor_mode, anchor_lat, anchor_lng, nipost_suggested_postcode, require_video, require_code)")
     .eq("id", checkin_id)
     .single();
   if (error || !c) return json({ error: "Check-in not found" }, 404);
@@ -191,8 +194,32 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ---- 3b. Plausibility (only ever moves "verified" to "review") ----
+  if (!c.is_anchor && verdict! !== "flagged") {
+    const [{ data: prevCheck }, { data: sameSpot }] = await Promise.all([
+      db.from("checkins").select("lat, lng, device_time").eq("reporter_id", c.reporter_id).neq("id", c.id)
+        .lt("device_time", c.device_time).order("device_time", { ascending: false }).limit(1).maybeSingle(),
+      db.from("checkins").select("id").eq("reporter_id", c.reporter_id).neq("property_id", c.property_id)
+        .eq("lat", c.lat).eq("lng", c.lng).limit(1).maybeSingle(),
+    ]);
+    const far = prevCheck ? impossibleTravel(
+      { lat: prevCheck.lat, lng: prevCheck.lng, at: new Date(prevCheck.device_time).getTime() },
+      { lat: c.lat, lng: c.lng, at: takenMs },
+    ) : null;
+    if (far) {
+      if (verdict! === "verified") verdict = "review";
+      reasons.push(`This reporter's previous check-in was ${far.km} km away only ${far.minutes} minutes earlier.`);
+    }
+    if (sameSpot) {
+      if (verdict! === "verified") verdict = "review";
+      reasons.push("The GPS point is exactly the same as a check-in at a different property.");
+    }
+  }
+
   // ---- 4. Photos (only worth comparing when the location matched) ----
-  let photo: PhotoCheck = { match: "unavailable", reason: null, note: null };
+  let photo: PhotoCheck = { match: "unavailable", reason: null, note: null, stage: null, digits: null };
+  let stageMatch: "match" | "mismatch" | "unsure" | "unavailable" | null = null;
+  let codeMatch: "seen" | "not_seen" | "not_issued" | "unavailable" | null = null;
   if (verdict! !== "flagged") {
     let anchorPaths: string[] = [];
     let previousPaths: string[] = [];
@@ -206,10 +233,51 @@ Deno.serve(async (req) => {
         .neq("id", c.id).order("server_time", { ascending: false }).limit(1).maybeSingle();
       previousPaths = prev?.photo_paths ?? [];
     }
-    photo = await checkPhotos(db, { anchorPaths, previousPaths, newPaths: c.photo_paths, isAnchor: c.is_anchor });
+    // The stage the owner is paying for, and the challenge code issued before these photos were taken.
+    let stageForCheck: string | null = null;
+    if (!c.is_anchor && c.milestone_id) {
+      const { data: m } = await db.from("milestones").select("name").eq("id", c.milestone_id).maybeSingle();
+      stageForCheck = m?.name ?? null;
+    }
+    let expectedCode: string | null = null;
+    const wantCode = !c.is_anchor && property.require_code;
+    if (wantCode) {
+      const { data: ch } = await db.from("checkin_challenges").select("code")
+        .eq("property_id", property.id).eq("reporter_id", c.reporter_id)
+        .gte("created_at", new Date(takenMs - 6 * 3_600_000).toISOString())
+        .lte("created_at", new Date(takenMs + OFFLINE_AFTER_MS).toISOString())
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      expectedCode = ch?.code ?? null;
+    }
+    photo = await checkPhotos(db, {
+      anchorPaths, previousPaths, newPaths: c.photo_paths, isAnchor: c.is_anchor,
+      stageName: stageForCheck, wantCode: wantCode && expectedCode !== null,
+    });
     if (!c.is_anchor && photo.match === "mismatch") {
       if (verdict! === "verified") verdict = "review";
       reasons.push(`Photos don't look like the anchored building${photo.reason ? `: ${photo.reason}` : "."}`);
+    }
+    if (photo.stage) {
+      stageMatch = photo.stage.match;
+      if (photo.stage.match === "mismatch") {
+        if (verdict! === "verified") verdict = "review";
+        reasons.push(`The photos don't look like the "${stageForCheck}" stage${photo.stage.reason ? `: ${photo.stage.reason}` : "."}`);
+      }
+    }
+    if (wantCode) {
+      if (expectedCode === null) {
+        codeMatch = "not_issued";
+        if (verdict! === "verified") verdict = "review";
+        reasons.push("The owner asked for a challenge code, but none was issued to this phone before the photos were taken.");
+      } else if (photo.digits === null || photo.match === "unavailable") {
+        codeMatch = "unavailable";            // our photo check was down: don't penalise the reporter
+      } else if (photo.digits.includes(expectedCode)) {
+        codeMatch = "seen";
+      } else {
+        codeMatch = "not_seen";
+        if (verdict! === "verified") verdict = "review";
+        reasons.push("The challenge code wasn't visible in the photos.");
+      }
     }
   }
 
@@ -244,6 +312,8 @@ Deno.serve(async (req) => {
     heading_ok: headingOk,
     photo_match: photo.match,
     photo_note: photo.note,
+    stage_match: stageMatch,
+    code_match: codeMatch,
     taken_offline: takenOffline,
   }).eq("id", c.id);
 

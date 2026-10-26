@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, cancelRequest, createInvite, requestCheckin, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, cancelRequest, createInvite, requestCheckin, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -339,6 +339,14 @@ export default async function PropertyPage({
                     : <>Want more than photos? Ask for a 15-second walk-round video with every check-in.</>}
                 </p>
                 <button type="submit" className="link-btn">{property.require_video ? "Turn off" : "Ask for video"}</button>
+              </form>}
+              {!isPlot && <form action={setRequireCode.bind(null, property.id, !property.require_code)} className="video-toggle">
+                <p className="small" style={{ margin: 0 }}>
+                  {property.require_code
+                    ? <><strong>Challenge code on.</strong> The app gives the reporter a 4-digit code to write on paper and photograph at the property. It proves the photos are fresh.</>
+                    : <>Worried about old photos? Ask for a challenge code: the reporter must photograph a fresh 4-digit code at the property.</>}
+                </p>
+                <button type="submit" className="link-btn">{property.require_code ? "Turn off" : "Ask for a code"}</button>
               </form>}
               {!isPlot && (reporterCount ?? 0) > 0 && (
                 <div className="request-box">

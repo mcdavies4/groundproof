@@ -21,6 +21,7 @@ export interface Property {
   plan_expires_at: string | null;
   check_credits: number;
   require_video?: boolean;
+  require_code?: boolean;
   estate_id?: string | null;
   kind?: "building" | "plot";
   beacons?: { label: string; lat: number; lng: number }[] | null;

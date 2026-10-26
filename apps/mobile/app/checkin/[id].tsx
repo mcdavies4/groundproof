@@ -15,7 +15,7 @@ import { enqueue, sendNow, stashPhotos, stashVideo, discard } from "@/lib/queue"
 const MAX_PHOTOS = 4;
 const ANCHOR_PHOTOS = 4;
 
-type Property = { id: string; label: string; postcode: string | null; anchored_at: string | null; require_video?: boolean };
+type Property = { id: string; label: string; postcode: string | null; anchored_at: string | null; require_video?: boolean; require_code?: boolean };
 const VIDEO_SECONDS = 15;
 type Milestone = { id: string; name: string; completed_checkin_id: string | null };
 type Shot = { uri: string; lat: number; lng: number; accuracy: number; mocked: boolean; time: string; heading: number | null };
@@ -72,8 +72,13 @@ export default function CheckIn() {
   const [anchorChoice, setAnchorChoice] = useState<"postcode" | "coordinates" | null>(null);
   const [claimedPostcode, setClaimedPostcode] = useState<string | null>(null);
   const [video, setVideo] = useState<string | null>(null);
+  // Challenge code: when the owner asks for one, the reporter writes it on paper and photographs it at the property.
+  const [code, setCode] = useState<string | null>(null);
+  const [codeFailed, setCodeFailed] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
   const [camMode, setCamMode] = useState<"picture" | "video">("picture");
+  // Some phones show a black preview or fail with "Unknown error" at 480p / a fixed bitrate. After one failure, drop those settings.
+  const [videoLite, setVideoLite] = useState(false);
   const [recording, setRecording] = useState(false);
   const [secs, setSecs] = useState(0);
   const cam = useRef<CameraView>(null);
@@ -82,6 +87,20 @@ export default function CheckIn() {
   const needsFind = isAnchor && !property?.postcode && anchorChoice === null;
   const needed = isAnchor ? ANCHOR_PHOTOS : 1;
   const videoRequired = !isAnchor && Boolean(property?.require_video);
+  const codeRequired = !isAnchor && Boolean(property?.require_code);
+
+  // Fetch the code once the property is known. Needs signal: with none, the check-in can still go ahead but won't be "Verified".
+  useEffect(() => {
+    if (!codeRequired || code) return;
+    let off = false;
+    (async () => {
+      const { data, error: e } = await supabase.rpc("get_challenge", { p_property: id });
+      if (off) return;
+      if (e || typeof data !== "string") setCodeFailed(true);
+      else { setCode(data); setCodeFailed(false); }
+    })();
+    return () => { off = true; };
+  }, [codeRequired, code, id]);
   const showCam = !videoOpen ? shots.length < MAX_PHOTOS : !video;
 
   // Resolves when the camera reports it's ready, or after `ms` whichever is first (older phones can be slow to switch modes).
@@ -102,6 +121,8 @@ export default function CheckIn() {
     await sleep(500);
     setRecording(true); setSecs(0);
     const tick = setInterval(() => setSecs((x) => x + 1), 1000);
+    // If the phone never stops the recording by itself, stop it a few seconds after the limit.
+    const guard = setTimeout(() => { try { cam.current?.stopRecording(); } catch {} }, (VIDEO_SECONDS + 4) * 1000);
     try {
       const started = Date.now();
       let r;
@@ -114,10 +135,12 @@ export default function CheckIn() {
         r = await cam.current.recordAsync({ maxDuration: VIDEO_SECONDS });
       }
       if (r?.uri) { setVideo(r.uri); setVideoOpen(false); }
-      else setError("The video didn't save. Try again, and make sure the phone has some free storage.");
+      else { setVideoLite(true); setError("The video didn't save. Try again, and make sure the phone has some free storage."); }
     } catch (e) {
-      setError(`Couldn't record the video: ${(e as Error).message}. Try again; if it keeps happening, email the36thltd@outlook.com with this message.`);
+      if (!videoLite) setVideoLite(true);
+      setError(`Couldn't record the video: ${(e as Error).message}. We've switched to a simpler video setting, so tap Record again. If it keeps happening, email the36thltd@outlook.com with this message.`);
     } finally {
+      clearTimeout(guard);
       clearInterval(tick);
       setRecording(false);
       setCamMode("picture");
@@ -129,7 +152,7 @@ export default function CheckIn() {
     let cancelled = false;
     (async () => {
       const [{ data: p, error: pErr }, { data: m }] = await Promise.all([
-        supabase.from("properties").select("id, label, postcode, anchored_at, require_video").eq("id", id).single(),
+        supabase.from("properties").select("id, label, postcode, anchored_at, require_video, require_code").eq("id", id).single(),
         supabase.from("milestones").select("id, name, completed_checkin_id").eq("property_id", id).order("sort"),
       ]);
       if (pErr || !p) {
@@ -426,14 +449,30 @@ export default function CheckIn() {
       {showCam && (
         <View style={{ borderRadius: 4, overflow: "hidden", aspectRatio: 3 / 4, backgroundColor: "#000" }}>
           <CameraView
+            key={`${camMode}-${videoLite ? "lite" : "std"}`}
             ref={cam} style={{ flex: 1 }} facing="back"
-            mode={camMode} mute videoQuality="480p" videoBitrate={1_500_000}
+            mode={camMode} mute
+            videoQuality={videoLite ? undefined : "480p"} videoBitrate={videoLite ? undefined : 1_500_000}
             onCameraReady={() => camReady.current?.()}
           />
           {recording && (
             <View style={{ position: "absolute", top: 12, left: 12, backgroundColor: c.flagged, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 }}>
               <Text style={{ color: "#fff", fontWeight: "800" }}>● REC {VIDEO_SECONDS - secs}s</Text>
             </View>
+          )}
+        </View>
+      )}
+      {codeRequired && !videoOpen && (
+        <View style={{ padding: 14, backgroundColor: c.plate, borderWidth: 2, borderColor: c.ink, borderRadius: 4, gap: 4 }}>
+          {code ? (
+            <>
+              <Text style={[s.body, { fontWeight: "800" }]}>Challenge code: {code}</Text>
+              <Text style={s.muted}>Write this number on paper and include it in one of your photos. The owner asked for it to show the photos are fresh.</Text>
+            </>
+          ) : codeFailed ? (
+            <Text style={s.muted}>The owner asked for a challenge code, but the phone couldn&apos;t get one. Connect to the internet and reopen this screen. Without the code the check-in can&apos;t be Verified.</Text>
+          ) : (
+            <Text style={s.muted}>Getting your challenge code…</Text>
           )}
         </View>
       )}

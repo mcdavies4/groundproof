@@ -122,6 +122,12 @@ export async function cancelRequest(propertyId: string, requestId: string) {
   revalidatePath(`/properties/${propertyId}`);
 }
 
+export async function setRequireCode(propertyId: string, on: boolean) {
+  const supabase = createClient();
+  await supabase.from("properties").update({ require_code: on }).eq("id", propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+}
+
 export async function setRequireVideo(propertyId: string, on: boolean) {
   const supabase = createClient();
   await supabase.from("properties").update({ require_video: on }).eq("id", propertyId);
