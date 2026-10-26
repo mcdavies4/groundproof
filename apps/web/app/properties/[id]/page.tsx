@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { PostcodePlate } from "@/components/PostcodePlate";
 import { VerdictBadge } from "@/components/VerdictBadge";
 import { formatMoney, type Checkin, type Milestone, type Property } from "@/lib/types";
-import { addMilestone, cancelRequest, createInvite, requestCheckin, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
+import { addMilestone, cancelRequest, createInvite, requestAudit, requestCheckin, setRequireCode, setRequireVideo, createShareLink, inviteViewer, leaveProperty, removeViewer, revokeShareLink, setCurrency } from "./actions";
 import Link from "next/link";
 import { ShareLink } from "@/components/ShareLink";
 import { CurrencySelect } from "@/components/CurrencySelect";
@@ -53,13 +53,13 @@ export default async function PropertyPage({
     isOwner
       ? supabase.from("viewer_invites").select("id, email, accepted_at").eq("property_id", property.id).order("created_at")
       : Promise.resolve({ data: [] as { id: string; email: string; accepted_at: string | null }[] }),
-    supabase.from("checkin_requests").select("id, note, due_by, created_at, fulfilled_at, cancelled_at")
+    supabase.from("checkin_requests").select("id, note, due_by, created_at, fulfilled_at, cancelled_at, audit_of")
       .eq("property_id", property.id).order("created_at", { ascending: false }).limit(1),
     supabase.from("property_members").select("user_id", { count: "exact", head: true })
       .eq("property_id", property.id).eq("role", "reporter"),
   ]);
   const lastRequest = requests?.[0] as
-    | { id: string; note: string | null; due_by: string | null; created_at: string; fulfilled_at: string | null; cancelled_at: string | null }
+    | { id: string; note: string | null; due_by: string | null; created_at: string; fulfilled_at: string | null; cancelled_at: string | null; audit_of: string | null }
     | undefined;
   const openRequest = lastRequest && !lastRequest.fulfilled_at && !lastRequest.cancelled_at ? lastRequest : null;
   const requestMsg = searchParams.request;
@@ -168,7 +168,7 @@ export default async function PropertyPage({
           <h2 id="log">Check-ins</h2>
           {openRequest && (
             <p className="notice">
-              Visit requested on {new Date(openRequest.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              {openRequest.audit_of ? "Second opinion requested" : "Visit requested"} on {new Date(openRequest.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
               {openRequest.due_by && <>, needed by {new Date(openRequest.due_by + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</>}.
               {" "}Waiting for the person on the ground.
             </p>
@@ -191,7 +191,7 @@ export default async function PropertyPage({
                 <li key={c.id}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
                     <strong>
-                      {c.is_anchor ? "Anchor visit" : c.milestone_id ? msName.get(c.milestone_id) ?? "Milestone" : "Routine check-in"}
+                      {c.is_anchor ? "Anchor visit" : c.audit_of ? "Second opinion visit" : c.milestone_id ? msName.get(c.milestone_id) ?? "Milestone" : "Routine check-in"}
                     </strong>
                     <VerdictBadge verdict={c.verdict} matchType={c.match_type} />
                   </div>
@@ -206,6 +206,19 @@ export default async function PropertyPage({
                     </p>
                   )}
                   {c.note && <p style={{ margin: "0.5rem 0 0" }}><span className="small muted">Note from your person: </span>{c.note}</p>}
+                  {c.audit_status === "agreed" && <p className="small" style={{ margin: "0.5rem 0 0", color: "var(--verified)" }}><strong>Second reporter agrees.</strong> A different person visited independently and saw the same.</p>}
+                  {c.audit_status === "disputed" && <p className="small" style={{ margin: "0.5rem 0 0", color: "var(--flagged)" }}><strong>Second reporter disagrees.</strong> Look at both visits before you pay for this stage.</p>}
+                  {c.audit_status === "unsure" && <p className="small" style={{ margin: "0.5rem 0 0", color: "var(--review)" }}><strong>Second opinion unclear.</strong> Compare this visit with the independent one.</p>}
+                  {!c.is_anchor && !c.audit_of && !c.audit_status && ["verified", "review"].includes(c.verdict) && (
+                    openRequest?.audit_of === c.id ? (
+                      <p className="small muted" style={{ margin: "0.5rem 0 0" }}>Second opinion requested. Waiting for a different reporter to visit.</p>
+                    ) : !openRequest && (reporterCount ?? 0) >= 2 ? (
+                      <form action={requestAudit.bind(null, property.id, c.id)} style={{ margin: "0.5rem 0 0" }}>
+                        <button type="submit" className="link-btn">Ask a second reporter to confirm this visit</button>
+                        <span className="small muted"> Uses one check-in.</span>
+                      </form>
+                    ) : null
+                  )}
                   <div className="checks small muted">
                     {c.photo_match === "match" && <span>Photos match the anchored building</span>}
                     {c.photo_match === "mismatch" && <span style={{ color: "var(--review)" }}>Photos don&apos;t look like the anchored building</span>}

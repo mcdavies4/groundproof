@@ -8,6 +8,7 @@
 // 3. Compass: at least one photo should face roughly the way the anchor's front photo did.
 // 4. Photos: Claude compares the photos with the anchor photos and writes a progress note. The same call
 //    checks the photos fit the stage being paid for, and reads the challenge code when the owner requires one.
+// 6. Second opinion: if the open request is an audit, only a different reporter can answer it, and Claude compares the two visits.
 // 5. Plausibility: a reporter can't be in two far-apart places minutes apart, or at the exact same GPS point at two properties.
 // Location decides verified/flagged; compass and photos can only downgrade "verified" to "review".
 // Offline check-ins: photos taken with no signal wait on the phone and upload later. They're
@@ -16,7 +17,7 @@
 import { cors, json } from "../_shared/cors.ts";
 import { adminClient, getCaller } from "../_shared/supabase.ts";
 import { nipost, NipostError, type ReverseData } from "../_shared/nipost.ts";
-import { checkPhotos, headingDiff, type PhotoCheck } from "../_shared/photocheck.ts";
+import { checkPhotos, compareVisits, headingDiff, type PhotoCheck } from "../_shared/photocheck.ts";
 import { distanceM } from "../_shared/geo.ts";
 import { impossibleTravel } from "../_shared/plausibility.ts";
 import { alertOwner } from "../_shared/email.ts";
@@ -281,6 +282,46 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ---- 6. Second opinion ----
+  // An open audit request can only be answered by someone other than the reporter who did the original visit.
+  let auditBlocked = false;
+  let auditOfId: string | null = null;
+  let auditResult: "agree" | "disagree" | "unsure" | "unavailable" | null = null;
+  let auditNote: string | null = null;
+  if (!c.is_anchor && verdict! !== "flagged") {
+    const { data: req } = await db.from("checkin_requests").select("id, audit_of, exclude_reporter")
+      .eq("property_id", property.id).is("fulfilled_at", null).is("cancelled_at", null)
+      .lte("created_at", new Date(takenMs + OFFLINE_AFTER_MS).toISOString()).maybeSingle();
+    if (req?.audit_of) {
+      if (req.exclude_reporter === c.reporter_id) {
+        auditBlocked = true;
+        reasons.push("This visit can't count as the owner's second opinion, because the same reporter did the original visit.");
+      } else {
+        const { data: orig } = await db.from("checkins")
+          .select("id, photo_paths, note, photo_note, milestone_id, server_time").eq("id", req.audit_of).maybeSingle();
+        if (orig) {
+          let origStage: string | null = null;
+          if (orig.milestone_id) {
+            const { data: m } = await db.from("milestones").select("name").eq("id", orig.milestone_id).maybeSingle();
+            origStage = m?.name ?? null;
+          }
+          const cmp = await compareVisits(db, {
+            originalPaths: orig.photo_paths ?? [], newPaths: c.photo_paths, stageName: origStage,
+            originalNote: orig.note, originalProgress: orig.photo_note,
+          });
+          auditOfId = orig.id; auditResult = cmp.result; auditNote = cmp.reason;
+          const on = new Date(orig.server_time).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+          reasons.push(
+            cmp.result === "agree" ? `Second opinion: this independent visit agrees with the visit on ${on}.`
+            : cmp.result === "disagree" ? `Second opinion: this independent visit does NOT agree with the visit on ${on}${cmp.reason ? `: ${cmp.reason}` : "."}`
+            : cmp.result === "unsure" ? `Second opinion: couldn't tell whether this agrees with the visit on ${on}. Compare the two visits.`
+            : `Second opinion: the two visits couldn't be compared automatically. Compare them yourself.`,
+          );
+        }
+      }
+    }
+  }
+
   // ---- 5. Video, when the owner asked for one ----
   if (!c.is_anchor && property.require_video && !c.video_path && verdict! !== "flagged") {
     if (verdict! === "verified") verdict = "review";
@@ -314,18 +355,27 @@ Deno.serve(async (req) => {
     photo_note: photo.note,
     stage_match: stageMatch,
     code_match: codeMatch,
+    audit_of: auditOfId,
+    audit_result: auditResult,
+    audit_note: auditNote,
     taken_offline: takenOffline,
   }).eq("id", c.id);
 
   // Answer the open check-in request, if this visit came after it was made.
   let answersRequest = false;
-  if (verdict! !== "flagged") {
+  if (verdict! !== "flagged" && !auditBlocked) {
     const { data: answered } = await db.from("checkin_requests")
       .update({ fulfilled_checkin_id: c.id, fulfilled_at: now })
       .eq("property_id", property.id).is("fulfilled_at", null).is("cancelled_at", null)
       .lte("created_at", new Date(takenMs + OFFLINE_AFTER_MS).toISOString())
       .select("id");
     answersRequest = (answered ?? []).length > 0;
+  }
+  // Record the outcome on the original visit, so the owner and any shared report can show it.
+  if (auditOfId && auditResult) {
+    await db.from("checkins").update({
+      audit_status: auditResult === "agree" ? "agreed" : auditResult === "disagree" ? "disputed" : "unsure",
+    }).eq("id", auditOfId);
   }
 
   if (verdict! === "verified" && c.is_anchor && !property.anchored_at) {

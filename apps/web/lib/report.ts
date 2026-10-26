@@ -4,6 +4,7 @@ import type { Currency, Verdict } from "@/lib/types";
 export interface ReportCheckin {
   id: string; time: string; verdict: Verdict; reason: string | null; note: string | null; photoNote: string | null;
   isAnchor: boolean; matchType: "postcode" | "coordinates" | null; stage: string | null; photos: string[];
+  audit: "agreed" | "disputed" | "unsure" | null; isAudit: boolean;
 }
 export interface ReportData {
   property: {
@@ -27,7 +28,7 @@ export async function loadReport(supabase: SupabaseClient, propertyId: string): 
   const [{ data: ms }, { data: cs }] = await Promise.all([
     supabase.from("milestones").select("id, name, amount, completed_checkin_id").eq("property_id", p.id).order("sort"),
     supabase.from("checkins")
-      .select("id, server_time, verdict, verdict_reason, photo_note, note, is_anchor, match_type, milestone_id, photo_paths")
+      .select("id, server_time, verdict, verdict_reason, photo_note, note, is_anchor, match_type, milestone_id, photo_paths, audit_status, audit_of")
       .eq("property_id", p.id).neq("verdict", "pending")
       .order("server_time", { ascending: false }).limit(MAX_CHECKINS),
   ]);
@@ -57,6 +58,7 @@ export async function loadReport(supabase: SupabaseClient, propertyId: string): 
       id: c.id, time: c.server_time, verdict: c.verdict, reason: c.verdict_reason, note: c.note, photoNote: c.photo_note,
       isAnchor: c.is_anchor, matchType: c.match_type, stage: c.milestone_id ? stageName.get(c.milestone_id) ?? null : null,
       photos: (c.photo_paths as string[]).slice(0, 4).map((x) => urls.get(x)).filter((u): u is string => !!u),
+      audit: c.audit_status ?? null, isAudit: !!c.audit_of,
     })),
     generatedAt: new Date().toISOString(),
   };

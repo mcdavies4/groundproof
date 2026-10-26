@@ -6,7 +6,7 @@
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
-export type OpenRequest = { id: string; property_id: string; label: string; note: string | null; due_by: string | null };
+export type OpenRequest = { id: string; property_id: string; label: string; note: string | null; due_by: string | null; audit_of?: string | null };
 
 const DAYS = [1, 2, 4];
 

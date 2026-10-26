@@ -139,3 +139,55 @@ export function headingDiff(a: number, b: number): number {
   const d = Math.abs(a - b) % 360;
   return d > 180 ? 360 - d : d;
 }
+
+
+export type AuditResult = "agree" | "disagree" | "unsure" | "unavailable";
+
+const AUDIT_PROMPT = (stage: string | null) => `You compare two independent visits to the same building site in Nigeria, done by two different reporters.
+ORIGINAL photos are from the first visit, with that reporter's notes. SECOND photos are from the second reporter, taken separately and possibly some days later.
+${stage ? `The owner is paying for the stage "${stage}".` : ""}
+
+Decide whether the SECOND visit agrees with the ORIGINAL about what is there and how far the work has got.
+- "yes": same building and a consistent state of work. Some progress between the two dates is normal.
+- "no": only when they clearly contradict each other, for example one shows a finished roof and the other no roof, or they appear to be different buildings.
+- "unsure": the photos don't show the same parts, or you can't tell.
+Describe only what you can see.
+
+Respond with JSON only, no other text:
+{"agree":"yes"|"no"|"unsure","reason":"<max 25 words>"}`;
+
+/** Compares an audit visit with the visit it double-checks. Can only inform the owner; never changes a verdict. */
+export async function compareVisits(
+  db: SupabaseClient,
+  args: { originalPaths: string[]; newPaths: string[]; stageName: string | null; originalNote: string | null; originalProgress: string | null },
+): Promise<{ result: AuditResult; reason: string | null }> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!key) return { result: "unavailable", reason: null };
+  try {
+    const orig = await loadImages(db, args.originalPaths.slice(0, 4));
+    const next = await loadImages(db, args.newPaths.slice(0, 4));
+    if (!orig.length || !next.length) return { result: "unavailable", reason: null };
+    const said = [args.originalNote && `Reporter's note: ${args.originalNote}`, args.originalProgress && `Earlier description: ${args.originalProgress}`].filter(Boolean).join("\n");
+    const content: unknown[] = [
+      { type: "text", text: `ORIGINAL photos:${said ? `\n${said}` : ""}` }, ...orig,
+      { type: "text", text: "SECOND photos:" }, ...next,
+      { type: "text", text: AUDIT_PROMPT(args.stageName) },
+    ];
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: MODEL(), max_tokens: 300, messages: [{ role: "user", content }] }),
+    });
+    if (!res.ok) { console.error("audit compare error", res.status, await res.text()); return { result: "unavailable", reason: null }; }
+    const body = await res.json();
+    const text: string = (body.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("");
+    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+    return {
+      result: parsed.agree === "yes" ? "agree" : parsed.agree === "no" ? "disagree" : "unsure",
+      reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 200) : null,
+    };
+  } catch (e) {
+    console.error("audit compare failed", e);
+    return { result: "unavailable", reason: null };
+  }
+}

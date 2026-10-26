@@ -67,10 +67,13 @@ export function Report({ data, shared = false }: { data: ReportData; shared?: bo
             {checkins.map((c) => (
               <li key={c.id} className="report-checkin">
                 <div className="report-checkin-head">
-                  <strong>{c.isAnchor ? "Anchor visit" : c.stage ? c.stage : "Routine check-in"}</strong>
+                  <strong>{c.isAnchor ? "Anchor visit" : c.isAudit ? "Second opinion visit" : c.stage ? c.stage : "Routine check-in"}</strong>
                   <VerdictBadge verdict={c.verdict} matchType={c.matchType} />
                 </div>
                 <div className="small muted">{when(c.time)}. {c.reason}</div>
+                {c.audit === "agreed" && <p className="small" style={{ margin: "0.4rem 0 0", color: "var(--verified)" }}><strong>Second reporter agrees.</strong> A different person visited independently and saw the same.</p>}
+                {c.audit === "disputed" && <p className="small" style={{ margin: "0.4rem 0 0", color: "var(--flagged)" }}><strong>Second reporter disagrees.</strong> See the independent visit.</p>}
+                {c.audit === "unsure" && <p className="small" style={{ margin: "0.4rem 0 0", color: "var(--review)" }}><strong>Second opinion unclear.</strong></p>}
                 {c.photoNote && <p className="photo-note"><span className="small muted">What the photos show: </span>{c.photoNote}</p>}
                 {c.note && <p style={{ margin: "0.4rem 0 0" }}><span className="small muted">Note from the visit: </span>{c.note}</p>}
                 {c.photos.length > 0 && (

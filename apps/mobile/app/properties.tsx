@@ -80,12 +80,16 @@ export default function Properties() {
     if (list.length) {
       const { data: reqs } = await supabase
         .from("checkin_requests")
-        .select("id, property_id, note, due_by")
+        .select("id, property_id, note, due_by, audit_of, exclude_reporter")
         .in("property_id", list.map((r) => r.id))
         .is("fulfilled_at", null)
         .is("cancelled_at", null);
       const label = new Map(list.map((r) => [r.id, r.label]));
-      open = (reqs ?? []).map((r) => ({ ...r, label: label.get(r.property_id) ?? "your property" }));
+      // A second-opinion request is for a different reporter: the person who did the original visit never sees it.
+      const { data: me } = await supabase.auth.getUser();
+      open = (reqs ?? [])
+        .filter((r: any) => !r.exclude_reporter || r.exclude_reporter !== me.user?.id)
+        .map((r: any) => ({ id: r.id, property_id: r.property_id, note: r.note, due_by: r.due_by, audit_of: r.audit_of, label: label.get(r.property_id) ?? "your property" }));
     }
     setRows(list); setRequests(open); setOfflineSince(null);
     await writeCache("properties", { rows: list, requests: open, at: new Date().toISOString() } satisfies Saved);
@@ -179,7 +183,7 @@ export default function Properties() {
             <Text style={[s.body, { fontWeight: "700", fontSize: 18 }]}>{item.label}</Text>
             {requests.filter((r) => r.property_id === item.id).map((r) => (
               <View key={r.id} style={{ backgroundColor: "#fdf6dc", borderLeftWidth: 4, borderLeftColor: c.plate, padding: 10, gap: 2 }}>
-                <Text style={[s.body, { fontWeight: "700" }]}>Visit requested{r.due_by ? ` by ${dueText(r.due_by)}` : ""}</Text>
+                <Text style={[s.body, { fontWeight: "700" }]}>{r.audit_of ? "Second opinion requested" : "Visit requested"}{r.due_by ? ` by ${dueText(r.due_by)}` : ""}</Text>
                 {r.note ? <Text style={s.muted}>{r.note}</Text> : null}
               </View>
             ))}

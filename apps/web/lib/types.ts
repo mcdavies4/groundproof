@@ -57,6 +57,9 @@ export interface Checkin {
   is_emulator: boolean;
   match_type: "postcode" | "coordinates" | null;
   distance_from_anchor_m: number | null;
+  audit_of: string | null;
+  audit_result: "agree" | "disagree" | "unsure" | "unavailable" | null;
+  audit_status: "agreed" | "disputed" | "unsure" | null;
 }
 
 export const PRODUCTS = {
