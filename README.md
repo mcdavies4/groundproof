@@ -65,6 +65,11 @@ URL `supabase start` prints.
 Test postcodes that exist in the mock and in NIPOST's docs: `LA-11-W06-TC-10`, `EN-05-V19-CD-22`,
 `FC-03-B06-AG-12`. Reserved mock keys like `mock_no_credits` exercise the L3→L2→L1 fallback.
 
+## ValueCheck
+
+Evidence-led indicative valuations for land and homes (Lagos first) at `/tools/value-check`. See `docs/valuecheck.md`.
+Tests: `cd apps/web && npm test`.
+
 ## Play Store
 
 See `docs/play-store/LISTING.md` for the store text, Data safety answers and release steps.

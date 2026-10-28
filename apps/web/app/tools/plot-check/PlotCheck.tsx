@@ -271,6 +271,13 @@ export function PlotCheck() {
                     Book a plot visit with these beacons
                   </a>
                 </p>
+                <p className="notice">
+                  Thinking of buying or selling it?{" "}
+                  <a href={`/tools/value-check?category=land&area=${result.area.toFixed(1)}&lat=${result.located.centre.lat.toFixed(6)}&lng=${result.located.centre.lng.toFixed(6)}`}>
+                    Get an evidence-based value range with ValueCheck
+                  </a>
+                  . It uses this area as calculated from the plan. That doesn&apos;t prove ownership or boundaries.
+                </p>
                 <table className="sides">
                   <thead><tr><th>Beacon</th><th>Latitude, longitude</th></tr></thead>
                   <tbody>
